@@ -125,7 +125,4 @@ Phần này chỉ cần dùng nếu muốn tự dựng lại từ đầu.
 7. Tạo object `HUD`, gắn `TwinMetricsHud`, rồi kéo `ConveyorBelt` vào trường `belt`.
 8. Với kiện hàng, tạo cube có `Rigidbody`, `Collider`, gắn `ConveyorPackage`, rồi kéo `ConveyorBelt` vào trường `belt`.
 
-Nếu muốn chạy như Digital Model, đổi `mode` thành `DigitalModel` và chỉnh `commandedSpeedMps`, `commandedLoadKg`.
-
-Nếu muốn chạy như Digital Shadow, đổi `mode` thành `DigitalShadow` và dùng `TwinTelemetrySimulator`. Ngoài ra có thể dùng `CsvTelemetryPlayer`: tạo object mới, gắn script này, kéo `Assets/Data/sample-telemetry.csv` vào trường `csvFile`, rồi kéo object đó vào `csvTelemetrySource`.
 
