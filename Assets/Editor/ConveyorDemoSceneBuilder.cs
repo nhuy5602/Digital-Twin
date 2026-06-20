@@ -211,11 +211,18 @@ public static class ConveyorDemoSceneBuilder
 
             var body = packageObject.AddComponent<Rigidbody>();
             body.mass = 4f + i;
+            body.isKinematic = true;
             body.constraints = RigidbodyConstraints.FreezeRotationX | RigidbodyConstraints.FreezeRotationZ;
 
             var package = packageObject.AddComponent<ConveyorPackage>();
             package.massKg = body.mass;
             package.belt = belt;
+            package.forceKinematicMotion = true;
+            package.loopOnBelt = true;
+            package.startZ = -2.75f;
+            package.endZ = 2.75f;
+            package.laneX = 0f;
+            package.rideHeightY = 0.86f;
         }
     }
 

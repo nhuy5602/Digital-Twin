@@ -61,6 +61,7 @@ Scene đã dựng sẵn các đối tượng:
 - `HUD - Twin Metrics`: bảng thông số digital twin khi chạy.
 - `Input Sensor` và `Output Sensor`: cảm biến đếm kiện hàng.
 - `Package 01` đến `Package 05`: kiện hàng có Rigidbody và mô phỏng ma sát.
+- Các cube hàng hóa tự chạy dọc theo băng chuyền. Khi tới cuối băng, chúng tự quay lại đầu băng để demo chạy liên tục.
 - `Input Pulley`, `Output Pulley`: puly hai đầu băng chuyền.
 - chân đỡ, ray đỡ và sàn nhà xưởng.
 
@@ -74,6 +75,26 @@ Khi bấm **Play**, HUD sẽ hiển thị:
 - công suất mô hình và công suất đo,
 - năng suất kiện/giờ,
 - trạng thái `NORMAL`, `OVERLOAD`, `OVERSPEED` hoặc `EMERGENCY STOP`.
+
+## Chuyen dong kien hang
+
+Script `ConveyorPackage` có chế độ demo:
+
+```text
+forceKinematicMotion = true
+loopOnBelt = true
+startZ = -2.75
+endZ = 2.75
+```
+
+Ở chế độ này, kiện hàng chạy theo tốc độ telemetry của băng chuyền. Công thức vật lý vẫn được dùng để ước lượng trượt:
+
+```text
+F_required = m * a
+F_max = mu_s * m * g
+```
+
+Nếu `F_required > F_max`, script đánh dấu kiện hàng đang trượt qua biến `IsSlipping`.
 
 ## Cong thuc vat ly ap dung
 
