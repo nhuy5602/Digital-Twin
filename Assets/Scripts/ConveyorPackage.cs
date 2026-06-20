@@ -27,7 +27,7 @@ namespace ConveyorTwin
             }
 
             var targetVelocity = transform.forward * belt.CurrentTelemetry.beltSpeedMps;
-            var velocityDelta = targetVelocity - body.velocity;
+            var velocityDelta = targetVelocity - body.linearVelocity;
             var desiredAcceleration = velocityDelta / Time.fixedDeltaTime;
 
             // Maximum transferable force before sliding: Fmax = mu_s * m * g.
