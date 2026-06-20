@@ -129,17 +129,3 @@ Nếu muốn chạy như Digital Model, đổi `mode` thành `DigitalModel` và 
 
 Nếu muốn chạy như Digital Shadow, đổi `mode` thành `DigitalShadow` và dùng `TwinTelemetrySimulator`. Ngoài ra có thể dùng `CsvTelemetryPlayer`: tạo object mới, gắn script này, kéo `Assets/Data/sample-telemetry.csv` vào trường `csvFile`, rồi kéo object đó vào `csvTelemetrySource`.
 
-## Goi y scene
-
-- Băng chuyền: cube scale khoảng `(0.8, 0.12, 6)`.
-- Puly: cylinder ở hai đầu băng.
-- Cảm biến vào/ra: cube mỏng có `Is Trigger`, gắn `ConveyorSensor`.
-- Kiện hàng: cube nhỏ scale khoảng `(0.45, 0.35, 0.45)`, có Rigidbody.
-
-## Tieu chi cham diem co the neu
-
-- Có phân biệt rõ **Digital Model** và **Digital Shadow**.
-- Có mô phỏng trực quan trên Unity.
-- Có dashboard hiển thị tốc độ, tải trọng, lực kéo, công suất, năng suất, cảnh báo.
-- Có áp dụng công thức vật lý và giải thích được ý nghĩa.
-- Có tình huống bất thường: quá tải, quá tốc, dừng khẩn cấp hoặc kiện bị trượt.
