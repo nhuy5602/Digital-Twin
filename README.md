@@ -102,14 +102,17 @@ Thiết bị sử dụng:
 Multiple Filling Nozzles
 Liquid Vessel
 Filling Stop Gate
+Filling Star Wheel
 ```
 
 Logic vận hành:
 
 - Dây chuyền có 4 vòi rót đặt theo cụm `Filling Nozzle 1..4`.
 - Conveyor đưa lần lượt 4 chai vào đúng vị trí dưới 4 vòi.
+- `Filling Star Wheel` quay theo nhịp conveyor để index chai vào các pocket.
 - `Filling Stop Gate` chặn các chai phía sau chưa đến lượt fill.
 - Khi đủ 4 chai vào vị trí, conveyor dừng toàn bộ.
+- Star Wheel dừng và khóa chai ở đúng vị trí dưới vòi.
 - Các vòi phun kích hoạt dòng chảy cùng lúc.
 - Chai được rót trong thời gian `fillingTimeSeconds`.
 - Khi chưa fill xong, conveyor không chạy.
@@ -127,6 +130,7 @@ Digital Twin Data:
 - `Filling Time`: thời gian rót gần nhất.
 - `Bottles At Filling Station`: số chai đang index dưới cụm vòi.
 - `Conveyor Stopped For Filling`: trạng thái conveyor dừng trong lúc rót.
+- `Star Wheel Locked`: trạng thái bánh sao đang khóa chai trong lúc fill.
 
 ## 3. QC Sensor Station
 
@@ -232,10 +236,13 @@ Logic multi-nozzle filling:
 
 ```text
 assign bottle to downstream filling slot first
+star wheel indexes bottle into pocket
 if assignedBottleCount == fillingNozzleCount
 and all bottles reached slot:
     stop conveyor
+    lock star wheel
     close filling stop gate
+    snap bottles to nozzle positions
     fill all bottles in parallel
     open gate
     restart conveyor

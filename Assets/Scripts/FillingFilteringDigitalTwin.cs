@@ -19,6 +19,7 @@ namespace ConveyorTwin
         public Transform fillingNozzle;
         public List<Transform> fillingNozzles = new List<Transform>();
         public Transform fillingStopGate;
+        public Transform fillingStarWheel;
         public Transform liquidVessel;
         public Transform vesselLiquidVisual;
         public Transform qcSensorBeam;
@@ -43,6 +44,8 @@ namespace ConveyorTwin
         public float fillingPitchM = 0.48f;
         public float fillingQueueStopZ = -2.45f;
         public float fillingSlotToleranceM = 0.03f;
+        public int starWheelPocketCount = 8;
+        public float starWheelAngularSpeedDps = 120f;
 
         [Header("Slat chain conveyor")]
         public float slatPitchM = 0.22f;
@@ -88,6 +91,7 @@ namespace ConveyorTwin
         public float CentrifugalAccelerationAtRimMps2 { get; private set; }
         public bool ConveyorStoppedForFilling { get; private set; }
         public bool TurntablePaused { get; private set; }
+        public bool StarWheelLocked { get; private set; }
         public int BottlesAtFillingStation { get; private set; }
         public int ActiveFillingNozzleCount => Mathf.Max(1, Mathf.Min(fillingNozzleCount, fillingNozzles.Count > 0 ? fillingNozzles.Count : fillingNozzleCount));
 
@@ -131,6 +135,7 @@ namespace ConveyorTwin
             BottlesOnConveyorCount = lineBottles.Count;
             BottlesAtFillingStation = fillingSlotAssignments.Count;
             ConveyorStoppedForFilling = fillingStationBusy;
+            StarWheelLocked = fillingStationBusy;
         }
 
         private void AnimateMachines()
@@ -148,6 +153,11 @@ namespace ConveyorTwin
                 var scale = qcSensorBeam.localScale;
                 scale.x = 1f + Mathf.Sin(Time.time * 10f) * 0.08f;
                 qcSensorBeam.localScale = scale;
+            }
+
+            if (fillingStarWheel != null && !fillingStationBusy)
+            {
+                fillingStarWheel.Rotate(Vector3.up, starWheelAngularSpeedDps * Time.deltaTime, Space.World);
             }
         }
 
@@ -533,7 +543,7 @@ namespace ConveyorTwin
 
                 fillingBottles.Add(bottle);
                 bottle.status = BottleQualityStatus.Filling;
-                bottle.transform.position = new Vector3(lineX, bottle.transform.position.y, FillingSlotZ(fillingSlotAssignments[bottle]));
+                SnapBottleToFillingSlot(bottle);
 
                 var targetVolume = Random.value <= properFillProbability ? 1f : Random.Range(0.5f, 0.6f);
                 bottle.isDefective = targetVolume < passThreshold;
@@ -549,6 +559,7 @@ namespace ConveyorTwin
                 {
                     if (bottle != null && targets.TryGetValue(bottle, out var targetVolume))
                     {
+                        SnapBottleToFillingSlot(bottle);
                         bottle.SetVolume(Mathf.Lerp(0f, targetVolume, ratio));
                     }
                 }
@@ -575,6 +586,16 @@ namespace ConveyorTwin
             LiquidLevelLiters = Mathf.Max(0f, LiquidLevelLiters - totalFilledVolume * bottleCapacityLiters);
             fillingSlotAssignments.Clear();
             fillingStationBusy = false;
+        }
+
+        private void SnapBottleToFillingSlot(BottleProcessState bottle)
+        {
+            if (bottle == null || !fillingSlotAssignments.TryGetValue(bottle, out var slotIndex))
+            {
+                return;
+            }
+
+            bottle.transform.position = new Vector3(lineX, bottle.transform.position.y, FillingSlotZ(slotIndex));
         }
 
         private void UpdateFillingGateVisual()

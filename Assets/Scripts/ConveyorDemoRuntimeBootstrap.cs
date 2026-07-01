@@ -31,6 +31,7 @@ namespace ConveyorTwin
             var metalMaterial = CreateMaterial(new Color(0.55f, 0.57f, 0.58f));
             var slatMaterial = CreateMaterial(new Color(0.78f, 0.72f, 0.62f));
             var ribMaterial = CreateMaterial(new Color(0.42f, 0.42f, 0.38f));
+            var starWheelMaterial = CreateMaterial(new Color(0.86f, 0.86f, 0.82f));
             var bottleMaterial = CreateMaterial(new Color(0.82f, 0.95f, 1f, 0.35f));
             var waterMaterial = CreateMaterial(new Color(0.1f, 0.55f, 1f, 0.85f));
             var sensorMaterial = CreateMaterial(new Color(0.1f, 0.75f, 1f));
@@ -45,6 +46,7 @@ namespace ConveyorTwin
             var vesselParts = CreateLiquidVessel(root.transform, metalMaterial, waterMaterial);
             var nozzles = CreateFillingNozzles(root.transform, metalMaterial, waterMaterial);
             var fillingStopGate = CreateFillingStopGate(root.transform, metalMaterial, rejectMaterial);
+            var starWheel = CreateFillingStarWheel(root.transform, starWheelMaterial, metalMaterial);
             var qcBeam = CreateQcSensor(root.transform, sensorMaterial, metalMaterial);
             var pusher = CreatePusher(root.transform, metalMaterial, rejectMaterial);
             var acceptChute = CreateChute(root.transform, "Accept Chute", new Vector3(0.95f, 0.28f, 4.4f), acceptMaterial, 18f);
@@ -60,6 +62,7 @@ namespace ConveyorTwin
             process.fillingNozzle = nozzles.Count > 0 ? nozzles[0] : null;
             process.fillingNozzles = nozzles;
             process.fillingStopGate = fillingStopGate;
+            process.fillingStarWheel = starWheel;
             process.liquidVessel = vesselParts.vessel;
             process.vesselLiquidVisual = vesselParts.liquid;
             process.qcSensorBeam = qcBeam;
@@ -75,6 +78,8 @@ namespace ConveyorTwin
             process.fillingFirstZ = -1.95f;
             process.fillingPitchM = 0.48f;
             process.fillingQueueStopZ = -2.45f;
+            process.starWheelPocketCount = 8;
+            process.starWheelAngularSpeedDps = 120f;
             process.infeedMotorSpeedRpm = 18f;
             process.fillingTimeSeconds = 1.35f;
             process.properFillProbability = 0.9f;
@@ -346,7 +351,44 @@ namespace ConveyorTwin
             var hud = hudObject.AddComponent<FillingFilteringHud>();
             hud.process = process;
             hud.position = new Vector2(16f, 16f);
-            hud.size = new Vector2(560f, 300f);
+            hud.size = new Vector2(580f, 325f);
+        }
+
+        private Transform CreateFillingStarWheel(Transform parent, Material wheelMaterial, Material metalMaterial)
+        {
+            var starWheelRoot = new GameObject("Filling Star Wheel");
+            starWheelRoot.transform.SetParent(parent);
+            starWheelRoot.transform.position = new Vector3(-0.42f, 0.72f, -1.23f);
+
+            var disc = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            disc.name = "Star Wheel Disc";
+            disc.transform.SetParent(starWheelRoot.transform);
+            disc.transform.localPosition = Vector3.zero;
+            disc.transform.localScale = new Vector3(0.38f, 0.045f, 0.38f);
+            disc.GetComponent<Renderer>().sharedMaterial = wheelMaterial;
+
+            const int pockets = 8;
+            for (var i = 0; i < pockets; i++)
+            {
+                var angle = i * Mathf.PI * 2f / pockets;
+                var tooth = CreateCube(
+                    starWheelRoot.transform,
+                    $"Star Wheel Pocket Tooth {i + 1}",
+                    starWheelRoot.transform.position + new Vector3(Mathf.Cos(angle) * 0.36f, 0.04f, Mathf.Sin(angle) * 0.36f),
+                    new Vector3(0.09f, 0.055f, 0.18f),
+                    metalMaterial);
+                tooth.transform.rotation = Quaternion.Euler(0f, -angle * Mathf.Rad2Deg, 0f);
+            }
+
+            const float firstZ = -1.95f;
+            const float pitch = 0.48f;
+            for (var i = 0; i < 4; i++)
+            {
+                var z = firstZ + i * pitch;
+                CreateCube(parent, $"Star Wheel Bottle Pocket {i + 1}", new Vector3(-0.2f, 0.78f, z), new Vector3(0.1f, 0.22f, 0.12f), metalMaterial);
+            }
+
+            return starWheelRoot.transform;
         }
 
         private GameObject CreateCube(Transform parent, string name, Vector3 position, Vector3 scale, Material material)

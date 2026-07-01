@@ -32,7 +32,7 @@ namespace ConveyorTwin
             DrawLine($"   omega: {process.TurntableAngularSpeedRadPerSec:0.00} rad/s | a_c rim: {process.CentrifugalAccelerationAtRimMps2:0.00} m/s2");
             DrawLine($"   Slat pitch: {process.slatPitchM:0.00} m | slip ratio: {process.conveyorSlipRatio:P0}");
             DrawLine($"2. Filling indexed: {process.BottlesAtFillingStation}/{process.ActiveFillingNozzleCount} | Conveyor stopped: {process.ConveyorStoppedForFilling}");
-            DrawLine($"   Turntable paused: {process.TurntablePaused}");
+            DrawLine($"   Turntable paused: {process.TurntablePaused} | Star wheel locked: {process.StarWheelLocked}");
             DrawLine($"   Vessel liquid level: {process.LiquidLevelLiters:0.0} L");
             DrawLine($"   Filling time: {process.LastFillingTimeSeconds:0.00} s");
             DrawLine($"3. Inspection status: {process.InspectionStatus}");

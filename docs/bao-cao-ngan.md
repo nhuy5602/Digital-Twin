@@ -37,9 +37,9 @@ Trong đó `omega` là vận tốc góc của mâm quay, `r` là khoảng cách 
 
 ### Filling Station
 
-Thiết bị: cụm `Multiple Filling Nozzles`, `Liquid Vessel` và `Filling Stop Gate`.
+Thiết bị: cụm `Multiple Filling Nozzles`, `Liquid Vessel`, `Filling Stop Gate` và `Filling Star Wheel`.
 
-Khi chai đến vùng rót, conveyor index đủ 4 chai vào đúng vị trí dưới 4 vòi. Gate phía trước vùng filling chặn các chai chưa đến lượt. Khi đủ chai, conveyor dừng toàn bộ và 4 vòi rót đồng thời trong thời gian `fillingTimeSeconds`. Nếu turntable đã đủ buffer trong lúc conveyor dừng, turntable cũng dừng để tránh tiếp tục cấp chai.
+Khi chai đến vùng rót, Star Wheel quay để index chai vào các pocket và đưa đủ 4 chai vào đúng vị trí dưới 4 vòi. Gate phía trước vùng filling chặn các chai chưa đến lượt. Khi đủ chai, conveyor dừng toàn bộ, Star Wheel khóa chai cố định tại slot và 4 vòi rót đồng thời trong thời gian `fillingTimeSeconds`. Nếu turntable đã đủ buffer trong lúc conveyor dừng, turntable cũng dừng để tránh tiếp tục cấp chai.
 
 Hệ thống mô phỏng:
 
@@ -94,9 +94,12 @@ Logic filling nhiều vòi:
 
 ```text
 assign bottle to filling slot
+star wheel indexes bottle into pocket
 when 4 bottles reached 4 nozzles:
     stop conveyor
+    lock star wheel
     close filling gate
+    snap bottles to fixed nozzle positions
     fill all bottles in parallel
     restart conveyor
 ```
