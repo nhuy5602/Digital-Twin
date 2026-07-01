@@ -129,6 +129,7 @@ namespace ConveyorTwin
         private float releaseTimer;
         private int spawnedCount;
         private bool fillingStationBusy;
+        private bool fillingCaptureBusy;
         private bool cappingStationBusy;
         private bool outletOccupied;
         private bool initializedTurntable;
@@ -159,9 +160,9 @@ namespace ConveyorTwin
             BottlesOnConveyorCount = lineBottles.Count;
             BottlesAtFillingStation = fillingSlotAssignments.Count;
             BottlesAtCappingStation = cappingSlotAssignments.Count;
-            ConveyorStoppedForFilling = fillingStationBusy;
+            ConveyorStoppedForFilling = fillingStationBusy || fillingCaptureBusy || StarWheelIndexing;
             ConveyorStoppedForCapping = cappingStationBusy;
-            StarWheelLocked = fillingStationBusy || StarWheelIndexing;
+            StarWheelLocked = fillingStationBusy || fillingCaptureBusy || StarWheelIndexing;
             CappingActive = cappingStationBusy;
         }
 
@@ -476,7 +477,7 @@ namespace ConveyorTwin
                             continue;
                         }
 
-                        position.z = Mathf.Min(position.z, fillingQueueStopZ);
+                        position.z = KeepBottleSpacing(bottle, Mathf.Min(position.z, fillingQueueStopZ));
                         bottle.transform.position = position;
                         continue;
                     }
@@ -537,32 +538,44 @@ namespace ConveyorTwin
 
         private float KeepBottleSpacing(BottleProcessState currentBottle, float candidateZ)
         {
-            var nearestAheadZ = float.PositiveInfinity;
-            foreach (var otherBottle in lineBottles)
+            var resolvedZ = candidateZ;
+            for (var guard = 0; guard < lineBottles.Count; guard++)
             {
-                if (otherBottle == null || otherBottle == currentBottle)
+                var nearestAheadZ = float.PositiveInfinity;
+                foreach (var otherBottle in lineBottles)
                 {
-                    continue;
+                    if (otherBottle == null || otherBottle == currentBottle || fillingBottles.Contains(otherBottle))
+                    {
+                        continue;
+                    }
+
+                    var otherZ = otherBottle.transform.position.z;
+                    if (otherZ >= resolvedZ - 0.001f && otherZ < nearestAheadZ)
+                    {
+                        nearestAheadZ = otherZ;
+                    }
                 }
 
-                var otherZ = otherBottle.transform.position.z;
-                if (otherZ > candidateZ && otherZ < nearestAheadZ)
+                if (float.IsPositiveInfinity(nearestAheadZ))
                 {
-                    nearestAheadZ = otherZ;
+                    return resolvedZ;
                 }
+
+                var spacedZ = nearestAheadZ - minimumBottleSpacingM;
+                if (resolvedZ <= spacedZ + 0.001f)
+                {
+                    return resolvedZ;
+                }
+
+                resolvedZ = spacedZ;
             }
 
-            if (float.IsPositiveInfinity(nearestAheadZ))
-            {
-                return candidateZ;
-            }
-
-            return Mathf.Min(candidateZ, nearestAheadZ - minimumBottleSpacingM);
+            return resolvedZ;
         }
 
         private bool IsConveyorStopped()
         {
-            return fillingStationBusy || cappingStationBusy || StarWheelIndexing;
+            return fillingStationBusy || fillingCaptureBusy || cappingStationBusy || StarWheelIndexing;
         }
 
         private bool IsLineStartBlocked()
@@ -588,7 +601,7 @@ namespace ConveyorTwin
 
         private bool CanCaptureBottleForFilling()
         {
-            return !fillingStationBusy && !StarWheelIndexing && fillingSlotAssignments.Count < ActiveFillingNozzleCount;
+            return !fillingStationBusy && !fillingCaptureBusy && !StarWheelIndexing && fillingSlotAssignments.Count < ActiveFillingNozzleCount;
         }
 
         private IEnumerator CaptureBottleIntoStarWheel(BottleProcessState bottle)
@@ -598,6 +611,7 @@ namespace ConveyorTwin
                 yield break;
             }
 
+            fillingCaptureBusy = true;
             fillingBottles.Add(bottle);
             bottle.transform.position = new Vector3(lineX, starWheelCenter.y, FillingEntryZ);
 
@@ -622,6 +636,7 @@ namespace ConveyorTwin
             fillingSlotAssignments[bottle] = 0;
             SnapBottleToFillingSlot(bottle);
             TryStartFillingBatch();
+            fillingCaptureBusy = false;
         }
 
         private void TryStartFillingBatch()

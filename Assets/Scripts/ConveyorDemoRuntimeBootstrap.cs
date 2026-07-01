@@ -411,7 +411,7 @@ namespace ConveyorTwin
             disc.transform.SetParent(starWheelRoot.transform);
             disc.transform.localPosition = Vector3.zero;
             var meshFilter = disc.AddComponent<MeshFilter>();
-            meshFilter.sharedMesh = CreateScallopedStarWheelMesh(FillingStarWheelPocketCount, FillingStarWheelOuterRadius, 0.18f, 0.08f, 10);
+            meshFilter.sharedMesh = CreateScallopedStarWheelMesh(FillingStarWheelPocketCount, FillingStarWheelOuterRadius, 0.18f, 0.08f, 10, FillingStarWheelEntryAngleDegrees);
             disc.AddComponent<MeshRenderer>().sharedMaterial = wheelMaterial;
 
             var hub = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
@@ -423,7 +423,8 @@ namespace ConveyorTwin
 
             for (var i = 0; i < FillingStarWheelPocketCount; i++)
             {
-                var angle = i * Mathf.PI * 2f / FillingStarWheelPocketCount;
+                var angleDegrees = FillingSlotAngleDegrees(i);
+                var angle = angleDegrees * Mathf.Deg2Rad;
                 var pocket = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
                 pocket.name = $"Star Wheel Rim Pocket Shadow {i + 1}";
                 pocket.transform.SetParent(starWheelRoot.transform);
@@ -437,7 +438,7 @@ namespace ConveyorTwin
                     starWheelRoot.transform.position + new Vector3(Mathf.Cos(angle + 0.08f) * 0.72f, 0.075f, Mathf.Sin(angle + 0.08f) * 0.72f),
                     new Vector3(0.045f, 0.045f, 0.15f),
                     wheelMaterial);
-                divider.transform.rotation = Quaternion.Euler(0f, -angle * Mathf.Rad2Deg, 0f);
+                divider.transform.rotation = Quaternion.Euler(0f, -angleDegrees, 0f);
             }
 
             for (var i = 0; i < 4; i++)
@@ -473,12 +474,13 @@ namespace ConveyorTwin
             guide.transform.rotation = Quaternion.Euler(0f, -angle, 0f);
         }
 
-        private Mesh CreateScallopedStarWheelMesh(int pocketCount, float outerRadius, float pocketDepth, float thickness, int samplesPerPocket)
+        private Mesh CreateScallopedStarWheelMesh(int pocketCount, float outerRadius, float pocketDepth, float thickness, int samplesPerPocket, float pocketAngleOffsetDegrees)
         {
             var ringCount = pocketCount * samplesPerPocket;
             var vertices = new Vector3[2 + ringCount * 2];
             var triangles = new List<int>(ringCount * 12);
             var pocketAngle = Mathf.PI * 2f / pocketCount;
+            var pocketAngleOffset = pocketAngleOffsetDegrees * Mathf.Deg2Rad;
             var halfPocketWidth = pocketAngle * 0.36f;
 
             vertices[0] = new Vector3(0f, thickness * 0.5f, 0f);
@@ -486,8 +488,8 @@ namespace ConveyorTwin
 
             for (var i = 0; i < ringCount; i++)
             {
-                var angle = i * Mathf.PI * 2f / ringCount;
-                var centered = Mathf.Repeat(angle + pocketAngle * 0.5f, pocketAngle) - pocketAngle * 0.5f;
+                var angle = pocketAngleOffset + i * Mathf.PI * 2f / ringCount;
+                var centered = Mathf.Repeat(angle - pocketAngleOffset + pocketAngle * 0.5f, pocketAngle) - pocketAngle * 0.5f;
                 var pocketRatio = Mathf.Clamp01(Mathf.Abs(centered) / halfPocketWidth);
                 var cutAmount = Mathf.Cos(pocketRatio * Mathf.PI * 0.5f);
                 var radius = outerRadius - pocketDepth * cutAmount * cutAmount;
