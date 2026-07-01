@@ -732,6 +732,11 @@ namespace ConveyorTwin
         {
             cappingStationBusy = true;
             CappingActive = true;
+            if (fillingStarWheel != null)
+            {
+                fillingStarWheel.localRotation = Quaternion.identity;
+            }
+
             var batch = new List<BottleProcessState>(cappingSlotAssignments.Keys);
 
             foreach (var bottle in batch)
