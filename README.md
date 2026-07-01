@@ -54,6 +54,8 @@ Logic vận hành:
 
 - Chai rỗng được sinh ra từ `Bottle Spawn Point` phía trên mâm.
 - Chai rơi xuống `Infeed Turntable`.
+- Khi bấm Play, turntable được nạp sẵn `initialTurntableBottleCount = 12` chai để không bị trống lúc bắt đầu.
+- Sau đó hệ thống chỉ sinh thêm chai từ trên xuống khi buffer thiếu chai.
 - Mâm quay tự xoay tại chỗ như một buffer/caching table.
 - Mô hình dùng công thức lực ly tâm gần đúng để đẩy chai dạt ra rìa barrier:
 
@@ -219,8 +221,10 @@ Logic xác suất lỗi:
 Logic turntable buffer:
 
 ```text
-spawn bottle from above
-drop to turntable
+prefill initial bottles on turntable
+if buffer has room:
+    spawn extra bottle from above
+    drop to turntable
 omega = rpm * 2π / 60
 a_c = omega^2 * r
 bottle moves outward to rim barrier

@@ -24,7 +24,7 @@ Thiết bị: `Infeed Turntable`.
 
 Mâm quay mô phỏng việc cấp chai rỗng vào băng chuyền theo thứ tự. Dữ liệu theo dõi gồm throughput và tốc độ mô-tơ cấp liệu.
 
-Trong bản mô phỏng mới, chai được sinh ra từ phía trên mâm và rơi xuống turntable. Turntable đóng vai trò buffer/caching table: chai nằm trên mâm sẽ xoay quanh tâm mâm, khi số lượng chai trong buffer đạt ngưỡng thì hệ thống xả từng chai ra outlet để đi vào conveyor chính.
+Trong bản mô phỏng mới, turntable được nạp sẵn một lượng chai ban đầu để thể hiện trạng thái buffer đang có hàng. Khi buffer thiếu chai, chai mới được sinh ra từ phía trên mâm và rơi xuống turntable. Turntable đóng vai trò buffer/caching table: chai nằm trên mâm sẽ xoay quanh tâm mâm, khi số lượng chai trong buffer đạt ngưỡng thì hệ thống xả từng chai ra outlet để đi vào conveyor chính.
 
 Logic infeed có áp dụng mô phỏng vật lý gần đúng:
 
@@ -99,8 +99,10 @@ P(underfilled) = 0.1
 ## 6. Logic turntable buffer
 
 ```text
-spawn bottle from above
-drop bottle into turntable
+prefill initial bottles on turntable
+if buffer has room:
+    spawn extra bottle from above
+    drop bottle into turntable
 omega = rpm * 2π / 60
 a_c = omega^2 * r
 bottle moves outward to rim barrier

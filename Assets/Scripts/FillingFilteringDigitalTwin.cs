@@ -47,6 +47,7 @@ namespace ConveyorTwin
         public float bottleDropHeight = 2.6f;
         public float bottleDropTimeSeconds = 0.45f;
         public float spawnIntervalSeconds = 0.45f;
+        public int initialTurntableBottleCount = 12;
         public int maxTurntableBuffer = 16;
         public int releaseThreshold = 7;
         public float releaseIntervalSeconds = 0.65f;
@@ -89,6 +90,7 @@ namespace ConveyorTwin
         private int spawnedCount;
         private bool fillingStationBusy;
         private bool outletOccupied;
+        private bool initializedTurntable;
 
         private void Awake()
         {
@@ -104,6 +106,7 @@ namespace ConveyorTwin
 
         private void Update()
         {
+            InitializeTurntableIfNeeded();
             AnimateMachines();
             UpdateTurntableBuffer();
             UpdateVesselVisual();
@@ -126,6 +129,32 @@ namespace ConveyorTwin
                 scale.x = 1f + Mathf.Sin(Time.time * 10f) * 0.08f;
                 qcSensorBeam.localScale = scale;
             }
+        }
+
+        private void InitializeTurntableIfNeeded()
+        {
+            if (initializedTurntable || bottleTemplate == null)
+            {
+                return;
+            }
+
+            initializedTurntable = true;
+            var count = Mathf.Min(initialTurntableBottleCount, maxTurntableBuffer);
+            for (var i = 0; i < count; i++)
+            {
+                var angle = i * 360f / Mathf.Max(1, count) + (i % 3) * 18f;
+                var ring = i % 3;
+                var radius = turntableRadius * (0.28f + ring * 0.22f);
+                var position = TurntablePosition(angle, radius);
+                var bottle = CreateBottleInstance(position);
+                bottle.status = BottleQualityStatus.InTurntableBuffer;
+                bottle.turntableVelocity = Random.insideUnitCircle * 0.04f;
+                turntableBottles.Add(bottle);
+            }
+
+            TurntableBufferCount = turntableBottles.Count;
+            spawnTimer = 0f;
+            releaseTimer = releaseIntervalSeconds;
         }
 
         private void UpdateTurntableBuffer()
@@ -157,16 +186,8 @@ namespace ConveyorTwin
                 : turntableCenter + Vector3.up * bottleDropHeight;
 
             var bottle = Instantiate(bottleTemplate, spawnPosition, Quaternion.identity, transform);
-            bottle.name = $"Bottle {spawnedCount:00}";
-            bottle.gameObject.SetActive(true);
+            ResetBottle(bottle);
             bottle.status = BottleQualityStatus.DroppingToTurntable;
-            bottle.SetVolume(0f);
-            bottle.isDefective = false;
-            bottle.fillingCompleted = false;
-            bottle.inspectionCompleted = false;
-            bottle.counted = false;
-            bottle.turntableVelocity = Vector2.zero;
-            bottles.Add(bottle);
 
             var angle = spawnedCount * 137.5f * Mathf.Deg2Rad;
             var radius = Random.Range(0.05f, turntableRadius * 0.25f);
@@ -192,6 +213,33 @@ namespace ConveyorTwin
             bottle.turntableVelocity = Random.insideUnitCircle * 0.05f;
             droppingBottles.Remove(bottle);
             turntableBottles.Add(bottle);
+        }
+
+        private BottleProcessState CreateBottleInstance(Vector3 position)
+        {
+            spawnedCount++;
+            var bottle = Instantiate(bottleTemplate, position, Quaternion.identity, transform);
+            ResetBottle(bottle);
+            return bottle;
+        }
+
+        private void ResetBottle(BottleProcessState bottle)
+        {
+            bottle.name = $"Bottle {spawnedCount:00}";
+            bottle.gameObject.SetActive(true);
+            bottle.SetVolume(0f);
+            bottle.isDefective = false;
+            bottle.fillingCompleted = false;
+            bottle.inspectionCompleted = false;
+            bottle.counted = false;
+            bottle.turntableVelocity = Vector2.zero;
+            bottles.Add(bottle);
+        }
+
+        private Vector3 TurntablePosition(float angleDegrees, float radius)
+        {
+            var angle = angleDegrees * Mathf.Deg2Rad;
+            return turntableCenter + new Vector3(Mathf.Cos(angle) * radius, 0f, Mathf.Sin(angle) * radius);
         }
 
         private void UpdateTurntablePhysics()

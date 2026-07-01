@@ -75,8 +75,9 @@ namespace ConveyorTwin
             process.turntableCenter = new Vector3(0f, 0.82f, -4.7f);
             process.turntableRadius = 0.95f;
             process.releaseThreshold = 7;
+            process.initialTurntableBottleCount = 12;
             process.maxTurntableBuffer = 16;
-            process.spawnIntervalSeconds = 0.42f;
+            process.spawnIntervalSeconds = 0.85f;
             process.releaseIntervalSeconds = 0.62f;
 
             CreateHud(root.transform, process);
