@@ -48,6 +48,7 @@ namespace ConveyorTwin
             var fillingStopGate = CreateFillingStopGate(root.transform, metalMaterial, rejectMaterial);
             var starWheel = CreateFillingStarWheel(root.transform, starWheelMaterial, metalMaterial);
             var qcBeam = CreateQcSensor(root.transform, sensorMaterial, metalMaterial);
+            var cappingHead = CreateCappingStation(root.transform, metalMaterial, waterMaterial);
             var pusher = CreatePusher(root.transform, metalMaterial, rejectMaterial);
             var acceptChute = CreateChute(root.transform, "Accept Chute", new Vector3(0.95f, 0.28f, 4.4f), acceptMaterial, 18f);
             var rejectChute = CreateChute(root.transform, "Reject Chute", new Vector3(-1.15f, 0.35f, 2.45f), rejectMaterial, -25f);
@@ -66,6 +67,7 @@ namespace ConveyorTwin
             process.liquidVessel = vesselParts.vessel;
             process.vesselLiquidVisual = vesselParts.liquid;
             process.qcSensorBeam = qcBeam;
+            process.cappingHead = cappingHead;
             process.pneumaticPusher = pusher;
             process.acceptChute = acceptChute;
             process.rejectChute = rejectChute;
@@ -78,6 +80,7 @@ namespace ConveyorTwin
             process.fillingFirstZ = -1.95f;
             process.fillingPitchM = 0.48f;
             process.fillingQueueStopZ = -2.45f;
+            process.cappingZ = 3.2f;
             process.starWheelPocketCount = 8;
             process.starWheelAngularSpeedDps = 120f;
             process.infeedMotorSpeedRpm = 18f;
@@ -327,6 +330,7 @@ namespace ConveyorTwin
             cap.transform.localPosition = new Vector3(0f, 0.67f, 0f);
             cap.transform.localScale = new Vector3(0.065f, 0.05f, 0.065f);
             cap.GetComponent<Renderer>().sharedMaterial = waterMaterial;
+            cap.SetActive(false);
 
             var liquid = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             liquid.name = "Bottle Liquid";
@@ -339,6 +343,7 @@ namespace ConveyorTwin
             state.bottleRenderer = body.GetComponent<Renderer>();
             state.liquidRenderer = liquid.GetComponent<Renderer>();
             state.liquidVisual = liquid.transform;
+            state.capVisual = cap.transform;
             state.SetVolume(0f);
             bottleRoot.SetActive(false);
             return state;
@@ -358,26 +363,33 @@ namespace ConveyorTwin
         {
             var starWheelRoot = new GameObject("Filling Star Wheel");
             starWheelRoot.transform.SetParent(parent);
-            starWheelRoot.transform.position = new Vector3(-0.42f, 0.72f, -1.23f);
+            starWheelRoot.transform.position = new Vector3(0f, 0.55f, -1.23f);
 
             var disc = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             disc.name = "Star Wheel Disc";
             disc.transform.SetParent(starWheelRoot.transform);
             disc.transform.localPosition = Vector3.zero;
-            disc.transform.localScale = new Vector3(0.38f, 0.045f, 0.38f);
+            disc.transform.localScale = new Vector3(0.72f, 0.055f, 0.72f);
             disc.GetComponent<Renderer>().sharedMaterial = wheelMaterial;
 
-            const int pockets = 8;
+            const int pockets = 14;
             for (var i = 0; i < pockets; i++)
             {
                 var angle = i * Mathf.PI * 2f / pockets;
-                var tooth = CreateCube(
+                var pocket = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                pocket.name = $"Star Wheel Pocket Cutout {i + 1}";
+                pocket.transform.SetParent(starWheelRoot.transform);
+                pocket.transform.position = starWheelRoot.transform.position + new Vector3(Mathf.Cos(angle) * 0.66f, 0.07f, Mathf.Sin(angle) * 0.66f);
+                pocket.transform.localScale = new Vector3(0.09f, 0.02f, 0.09f);
+                pocket.GetComponent<Renderer>().sharedMaterial = metalMaterial;
+
+                var divider = CreateCube(
                     starWheelRoot.transform,
-                    $"Star Wheel Pocket Tooth {i + 1}",
-                    starWheelRoot.transform.position + new Vector3(Mathf.Cos(angle) * 0.36f, 0.04f, Mathf.Sin(angle) * 0.36f),
-                    new Vector3(0.09f, 0.055f, 0.18f),
+                    $"Star Wheel Pocket Divider {i + 1}",
+                    starWheelRoot.transform.position + new Vector3(Mathf.Cos(angle + 0.11f) * 0.58f, 0.075f, Mathf.Sin(angle + 0.11f) * 0.58f),
+                    new Vector3(0.035f, 0.035f, 0.16f),
                     metalMaterial);
-                tooth.transform.rotation = Quaternion.Euler(0f, -angle * Mathf.Rad2Deg, 0f);
+                divider.transform.rotation = Quaternion.Euler(0f, -angle * Mathf.Rad2Deg, 0f);
             }
 
             const float firstZ = -1.95f;
@@ -385,10 +397,34 @@ namespace ConveyorTwin
             for (var i = 0; i < 4; i++)
             {
                 var z = firstZ + i * pitch;
-                CreateCube(parent, $"Star Wheel Bottle Pocket {i + 1}", new Vector3(-0.2f, 0.78f, z), new Vector3(0.1f, 0.22f, 0.12f), metalMaterial);
+                CreateCube(parent, $"Star Wheel Bottle Pocket Guide {i + 1}", new Vector3(-0.22f, 0.78f, z), new Vector3(0.08f, 0.2f, 0.12f), metalMaterial);
             }
 
             return starWheelRoot.transform;
+        }
+
+        private Transform CreateCappingStation(Transform parent, Material metalMaterial, Material capMaterial)
+        {
+            CreateCube(parent, "Capping Station Frame", new Vector3(-0.42f, 1.24f, 3.2f), new Vector3(0.08f, 0.9f, 0.08f), metalMaterial);
+            CreateCube(parent, "Capping Station Arm", new Vector3(-0.18f, 1.48f, 3.2f), new Vector3(0.5f, 0.08f, 0.08f), metalMaterial);
+
+            var head = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            head.name = "Capping Head";
+            head.transform.SetParent(parent);
+            head.transform.position = new Vector3(0f, 1.1f, 3.2f);
+            head.transform.localScale = new Vector3(0.1f, 0.18f, 0.1f);
+            head.GetComponent<Renderer>().sharedMaterial = metalMaterial;
+
+            var capFeed = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            capFeed.name = "Cap Feeder Bowl";
+            capFeed.transform.SetParent(parent);
+            capFeed.transform.position = new Vector3(0.72f, 1.2f, 3.2f);
+            capFeed.transform.localScale = new Vector3(0.32f, 0.12f, 0.32f);
+            capFeed.GetComponent<Renderer>().sharedMaterial = capMaterial;
+
+            CreateCube(parent, "Cap Feed Rail", new Vector3(0.36f, 1.28f, 3.2f), new Vector3(0.7f, 0.04f, 0.05f), metalMaterial);
+
+            return head.transform;
         }
 
         private GameObject CreateCube(Transform parent, string name, Vector3 position, Vector3 scale, Material material)

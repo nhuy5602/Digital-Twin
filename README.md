@@ -109,7 +109,7 @@ Logic vận hành:
 
 - Dây chuyền có 4 vòi rót đặt theo cụm `Filling Nozzle 1..4`.
 - Conveyor đưa lần lượt 4 chai vào đúng vị trí dưới 4 vòi.
-- `Filling Star Wheel` quay theo nhịp conveyor để index chai vào các pocket.
+- `Filling Star Wheel` là đĩa tròn lớn có các pocket lõm quanh viền, dùng để index/giữ chai đúng vị trí dưới vòi.
 - `Filling Stop Gate` chặn các chai phía sau chưa đến lượt fill.
 - Khi đủ 4 chai vào vị trí, conveyor dừng toàn bộ.
 - Star Wheel dừng và khóa chai ở đúng vị trí dưới vòi.
@@ -131,6 +131,24 @@ Digital Twin Data:
 - `Bottles At Filling Station`: số chai đang index dưới cụm vòi.
 - `Conveyor Stopped For Filling`: trạng thái conveyor dừng trong lúc rót.
 - `Star Wheel Locked`: trạng thái bánh sao đang khóa chai trong lúc fill.
+
+## 5. Capping Station
+
+Thiết bị sử dụng:
+
+```text
+Capping Head
+Cap Feeder Bowl
+Cap Feed Rail
+```
+
+Logic vận hành:
+
+- Chỉ chai `PASSED` mới đi tới trạm đóng nắp.
+- Chai `REJECTED` bị piston đẩy xuống reject chute trước khi tới capping.
+- Khi chai đạt tới `cappingZ`, `Capping Head` hạ xuống.
+- Nắp chai được bật hiển thị trên bottle.
+- Sau khi đóng nắp, chai chuyển trạng thái `CAPPED` và đi tiếp tới `Accept Chute`.
 
 ## 3. QC Sensor Station
 

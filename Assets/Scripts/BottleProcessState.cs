@@ -11,6 +11,7 @@ namespace ConveyorTwin
         Filling,
         Filled,
         Passed,
+        Capped,
         Rejected,
         AcceptedBin,
         RejectedBin
@@ -23,8 +24,10 @@ namespace ConveyorTwin
         public bool isDefective;
         public bool fillingCompleted;
         public bool inspectionCompleted;
+        public bool cappingCompleted;
         public bool counted;
         public Vector2 turntableVelocity;
+        public Transform capVisual;
 
         [Header("Visuals")]
         public Transform liquidVisual;
@@ -80,6 +83,7 @@ namespace ConveyorTwin
             switch (status)
             {
                 case BottleQualityStatus.Passed:
+                case BottleQualityStatus.Capped:
                 case BottleQualityStatus.AcceptedBin:
                     bottleRenderer.material.color = passedColor;
                     break;
@@ -90,6 +94,11 @@ namespace ConveyorTwin
                 default:
                     bottleRenderer.material.color = emptyColor;
                     break;
+            }
+
+            if (capVisual != null)
+            {
+                capVisual.gameObject.SetActive(cappingCompleted || status == BottleQualityStatus.Capped || status == BottleQualityStatus.AcceptedBin);
             }
         }
     }

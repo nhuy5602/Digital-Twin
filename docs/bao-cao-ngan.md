@@ -39,7 +39,7 @@ Trong đó `omega` là vận tốc góc của mâm quay, `r` là khoảng cách 
 
 Thiết bị: cụm `Multiple Filling Nozzles`, `Liquid Vessel`, `Filling Stop Gate` và `Filling Star Wheel`.
 
-Khi chai đến vùng rót, Star Wheel quay để index chai vào các pocket và đưa đủ 4 chai vào đúng vị trí dưới 4 vòi. Gate phía trước vùng filling chặn các chai chưa đến lượt. Khi đủ chai, conveyor dừng toàn bộ, Star Wheel khóa chai cố định tại slot và 4 vòi rót đồng thời trong thời gian `fillingTimeSeconds`. Nếu turntable đã đủ buffer trong lúc conveyor dừng, turntable cũng dừng để tránh tiếp tục cấp chai.
+Khi chai đến vùng rót, Star Wheel dạng đĩa tròn lớn có các pocket lõm quanh mép sẽ quay để index chai vào pocket và đưa đủ 4 chai vào đúng vị trí dưới 4 vòi. Gate phía trước vùng filling chặn các chai chưa đến lượt. Khi đủ chai, conveyor dừng toàn bộ, Star Wheel khóa chai cố định tại slot và 4 vòi rót đồng thời trong thời gian `fillingTimeSeconds`. Nếu turntable đã đủ buffer trong lúc conveyor dừng, turntable cũng dừng để tránh tiếp tục cấp chai.
 
 Hệ thống mô phỏng:
 
@@ -62,6 +62,12 @@ Volume < 95%  => REJECTED
 Thiết bị: `Pneumatic Pusher`, `Accept Chute`, `Reject Chute`.
 
 Chai đạt đi thẳng xuống máng accept. Chai lỗi đến vị trí piston sẽ được pusher đẩy sang máng reject.
+
+### Capping Station
+
+Thiết bị: `Capping Head`, `Cap Feeder Bowl`, `Cap Feed Rail`.
+
+Chỉ chai đạt chuẩn mới đi tới trạm đóng nắp. Chai lỗi bị loại trước đó tại reject station. Khi chai đạt đến vị trí `cappingZ`, capping head hạ xuống, nắp chai được bật hiển thị, chai chuyển trạng thái `CAPPED` rồi đi tiếp xuống accept chute.
 
 ## 4. Công thức và logic
 
