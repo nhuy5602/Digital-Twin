@@ -37,9 +37,11 @@ Trong đó `omega` là vận tốc góc của mâm quay, `r` là khoảng cách 
 
 ### Filling Station
 
-Thiết bị: `Filling Nozzle` và `Liquid Vessel`.
+Thiết bị: cụm `Multiple Filling Nozzles`, `Liquid Vessel` và `Filling Stop Gate`.
 
-Khi chai đến vùng rót, chai dừng lại trong thời gian `fillingTimeSeconds`. Hệ thống mô phỏng:
+Khi chai đến vùng rót, conveyor index đủ 4 chai vào đúng vị trí dưới 4 vòi. Gate phía trước vùng filling chặn các chai chưa đến lượt. Khi đủ chai, conveyor dừng toàn bộ và 4 vòi rót đồng thời trong thời gian `fillingTimeSeconds`. Nếu turntable đã đủ buffer trong lúc conveyor dừng, turntable cũng dừng để tránh tiếp tục cấp chai.
+
+Hệ thống mô phỏng:
 
 - 90% chai được rót đủ 100% dung tích,
 - 10% chai bị underfilled, chỉ đạt 50-60% dung tích.
@@ -86,6 +88,17 @@ Logic xác suất:
 ```text
 P(properly filled) = 0.9
 P(underfilled) = 0.1
+```
+
+Logic filling nhiều vòi:
+
+```text
+assign bottle to filling slot
+when 4 bottles reached 4 nozzles:
+    stop conveyor
+    close filling gate
+    fill all bottles in parallel
+    restart conveyor
 ```
 
 ## 5. Thành phần Unity

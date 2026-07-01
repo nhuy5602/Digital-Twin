@@ -43,7 +43,8 @@ namespace ConveyorTwin
             var bottleSpawnPoint = CreateBottleDropper(root.transform, metalMaterial);
             var turntableOutlet = CreateTurntableOutlet(root.transform, metalMaterial);
             var vesselParts = CreateLiquidVessel(root.transform, metalMaterial, waterMaterial);
-            var nozzle = CreateFillingNozzle(root.transform, metalMaterial, waterMaterial);
+            var nozzles = CreateFillingNozzles(root.transform, metalMaterial, waterMaterial);
+            var fillingStopGate = CreateFillingStopGate(root.transform, metalMaterial, rejectMaterial);
             var qcBeam = CreateQcSensor(root.transform, sensorMaterial, metalMaterial);
             var pusher = CreatePusher(root.transform, metalMaterial, rejectMaterial);
             var acceptChute = CreateChute(root.transform, "Accept Chute", new Vector3(0.95f, 0.28f, 4.4f), acceptMaterial, 18f);
@@ -56,7 +57,9 @@ namespace ConveyorTwin
             process.infeedTurntable = turntable;
             process.bottleSpawnPoint = bottleSpawnPoint;
             process.turntableOutlet = turntableOutlet;
-            process.fillingNozzle = nozzle;
+            process.fillingNozzle = nozzles.Count > 0 ? nozzles[0] : null;
+            process.fillingNozzles = nozzles;
+            process.fillingStopGate = fillingStopGate;
             process.liquidVessel = vesselParts.vessel;
             process.vesselLiquidVisual = vesselParts.liquid;
             process.qcSensorBeam = qcBeam;
@@ -68,6 +71,10 @@ namespace ConveyorTwin
             process.slatPitchM = 0.22f;
             process.conveyorSlipRatio = 0.02f;
             process.minimumBottleSpacingM = 0.46f;
+            process.fillingNozzleCount = 4;
+            process.fillingFirstZ = -1.95f;
+            process.fillingPitchM = 0.48f;
+            process.fillingQueueStopZ = -2.45f;
             process.infeedMotorSpeedRpm = 18f;
             process.fillingTimeSeconds = 1.35f;
             process.properFillProbability = 0.9f;
@@ -229,25 +236,44 @@ namespace ConveyorTwin
             return (vessel.transform, liquid.transform);
         }
 
-        private Transform CreateFillingNozzle(Transform parent, Material metalMaterial, Material waterMaterial)
+        private List<Transform> CreateFillingNozzles(Transform parent, Material metalMaterial, Material waterMaterial)
         {
-            CreateCube(parent, "Nozzle Support Arm", new Vector3(-0.6f, 1.45f, -1.65f), new Vector3(1.2f, 0.08f, 0.08f), metalMaterial);
+            var nozzles = new List<Transform>();
+            CreateCube(parent, "Filling Nozzle Main Rail", new Vector3(-0.54f, 1.45f, -1.23f), new Vector3(1.1f, 0.08f, 2.1f), metalMaterial);
 
-            var nozzle = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-            nozzle.name = "Filling Nozzle";
-            nozzle.transform.SetParent(parent);
-            nozzle.transform.position = new Vector3(0f, 1.08f, -1.65f);
-            nozzle.transform.localScale = new Vector3(0.08f, 0.32f, 0.08f);
-            nozzle.GetComponent<Renderer>().sharedMaterial = metalMaterial;
+            const int nozzleCount = 4;
+            const float firstZ = -1.95f;
+            const float pitch = 0.48f;
+            for (var i = 0; i < nozzleCount; i++)
+            {
+                var z = firstZ + i * pitch;
+                CreateCube(parent, $"Nozzle Spring {i + 1}", new Vector3(0f, 1.34f, z), new Vector3(0.08f, 0.18f, 0.08f), metalMaterial);
 
-            var flow = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-            flow.name = "Liquid Flow Visual";
-            flow.transform.SetParent(nozzle.transform);
-            flow.transform.localPosition = new Vector3(0f, -0.7f, 0f);
-            flow.transform.localScale = new Vector3(0.25f, 0.55f, 0.25f);
-            flow.GetComponent<Renderer>().sharedMaterial = waterMaterial;
+                var nozzle = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                nozzle.name = $"Filling Nozzle {i + 1}";
+                nozzle.transform.SetParent(parent);
+                nozzle.transform.position = new Vector3(0f, 1.08f, z);
+                nozzle.transform.localScale = new Vector3(0.07f, 0.32f, 0.07f);
+                nozzle.GetComponent<Renderer>().sharedMaterial = metalMaterial;
 
-            return nozzle.transform;
+                var flow = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                flow.name = $"Liquid Flow Visual {i + 1}";
+                flow.transform.SetParent(nozzle.transform);
+                flow.transform.localPosition = new Vector3(0f, -0.7f, 0f);
+                flow.transform.localScale = new Vector3(0.22f, 0.55f, 0.22f);
+                flow.GetComponent<Renderer>().sharedMaterial = waterMaterial;
+
+                nozzles.Add(nozzle.transform);
+            }
+
+            return nozzles;
+        }
+
+        private Transform CreateFillingStopGate(Transform parent, Material metalMaterial, Material gateMaterial)
+        {
+            CreateCube(parent, "Filling Gate Frame Left", new Vector3(-0.35f, 0.96f, -2.45f), new Vector3(0.05f, 0.6f, 0.05f), metalMaterial);
+            CreateCube(parent, "Filling Gate Frame Right", new Vector3(0.35f, 0.96f, -2.45f), new Vector3(0.05f, 0.6f, 0.05f), metalMaterial);
+            return CreateCube(parent, "Filling Stop Gate", new Vector3(0f, 1.1f, -2.45f), new Vector3(0.58f, 0.16f, 0.06f), gateMaterial).transform;
         }
 
         private Transform CreateQcSensor(Transform parent, Material sensorMaterial, Material metalMaterial)

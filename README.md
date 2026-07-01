@@ -99,16 +99,22 @@ Trong demo, `conveyorSlipRatio = 0.02`, nghĩa là chai gần như bám theo sla
 Thiết bị sử dụng:
 
 ```text
-Filling Nozzle
+Multiple Filling Nozzles
 Liquid Vessel
+Filling Stop Gate
 ```
 
 Logic vận hành:
 
-- Khi chai đến `Filling Trigger Zone`, chai tạm dừng tại vị trí vòi rót.
-- Vòi phun kích hoạt dòng chảy.
+- Dây chuyền có 4 vòi rót đặt theo cụm `Filling Nozzle 1..4`.
+- Conveyor đưa lần lượt 4 chai vào đúng vị trí dưới 4 vòi.
+- `Filling Stop Gate` chặn các chai phía sau chưa đến lượt fill.
+- Khi đủ 4 chai vào vị trí, conveyor dừng toàn bộ.
+- Các vòi phun kích hoạt dòng chảy cùng lúc.
 - Chai được rót trong thời gian `fillingTimeSeconds`.
-- Sau khi rót xong, chai tiếp tục chạy sang trạm QC.
+- Khi chưa fill xong, conveyor không chạy.
+- Nếu turntable đã đủ buffer trong lúc conveyor dừng, turntable cũng dừng.
+- Sau khi rót xong, gate mở, conveyor chạy tiếp sang trạm QC.
 
 Logic lỗi tạo điểm nhấn:
 
@@ -119,6 +125,8 @@ Digital Twin Data:
 
 - `Liquid Level`: mức chất lỏng còn lại trong bồn tổng.
 - `Filling Time`: thời gian rót gần nhất.
+- `Bottles At Filling Station`: số chai đang index dưới cụm vòi.
+- `Conveyor Stopped For Filling`: trạng thái conveyor dừng trong lúc rót.
 
 ## 3. QC Sensor Station
 
@@ -175,6 +183,8 @@ HUD trong game hiển thị:
 - Turntable buffer và số chai trên conveyor.
 - `omega` và `a_c rim` của turntable.
 - Slat pitch và slip ratio của conveyor.
+- Số chai đang chờ/đang index tại cụm filling.
+- Trạng thái conveyor stop khi filling.
 - Vessel liquid level, L.
 - Filling time, s.
 - Inspection status.
@@ -216,6 +226,27 @@ Logic xác suất lỗi:
 ```text
 90% => volume = 1.0
 10% => volume = random(0.5, 0.6)
+```
+
+Logic multi-nozzle filling:
+
+```text
+assign bottle to downstream filling slot first
+if assignedBottleCount == fillingNozzleCount
+and all bottles reached slot:
+    stop conveyor
+    close filling stop gate
+    fill all bottles in parallel
+    open gate
+    restart conveyor
+```
+
+Logic interlock turntable:
+
+```text
+if conveyor is stopped for filling
+and turntableBuffer >= releaseThreshold:
+    pause turntable motor
 ```
 
 Logic turntable buffer:
