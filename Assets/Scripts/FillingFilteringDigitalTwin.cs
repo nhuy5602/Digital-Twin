@@ -775,7 +775,7 @@ namespace ConveyorTwin
 
             StarWheelIndexing = true;
             var startRotation = fillingStarWheel.localRotation;
-            var targetRotation = startRotation * Quaternion.Euler(0f, -slotDelta * StarWheelStepAngleDegrees, 0f);
+            var targetRotation = startRotation * Quaternion.Euler(0f, slotDelta * StarWheelStepAngleDegrees, 0f);
             starWheelIndex = (starWheelIndex + slotDelta) % Mathf.Max(1, starWheelPocketCount);
             var elapsed = 0f;
             var duration = Mathf.Max(0.05f, starWheelIndexDurationSeconds);
