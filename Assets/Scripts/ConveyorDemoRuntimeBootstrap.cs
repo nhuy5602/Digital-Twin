@@ -48,9 +48,9 @@ namespace ConveyorTwin
             var fillingStopGate = CreateFillingStopGate(root.transform, metalMaterial, rejectMaterial);
             var starWheel = CreateFillingStarWheel(root.transform, starWheelMaterial, metalMaterial);
             var qcBeam = CreateQcSensor(root.transform, sensorMaterial, metalMaterial);
-            var cappingHead = CreateCappingStation(root.transform, metalMaterial, waterMaterial);
+            var cappingHeads = CreateCappingStation(root.transform, metalMaterial, waterMaterial);
             var pusher = CreatePusher(root.transform, metalMaterial, rejectMaterial);
-            var acceptChute = CreateChute(root.transform, "Accept Chute", new Vector3(0.95f, 0.28f, 4.4f), acceptMaterial, 18f);
+            var acceptChute = CreateChute(root.transform, "Accept Chute", new Vector3(0.95f, 0.28f, 5.45f), acceptMaterial, 18f);
             var rejectChute = CreateChute(root.transform, "Reject Chute", new Vector3(-1.15f, 0.35f, 2.45f), rejectMaterial, -25f);
             var bottleTemplate = CreateBottleTemplate(root.transform, bottleMaterial, waterMaterial);
 
@@ -67,7 +67,8 @@ namespace ConveyorTwin
             process.liquidVessel = vesselParts.vessel;
             process.vesselLiquidVisual = vesselParts.liquid;
             process.qcSensorBeam = qcBeam;
-            process.cappingHead = cappingHead;
+            process.cappingHead = cappingHeads.Count > 0 ? cappingHeads[0] : null;
+            process.cappingHeads = cappingHeads;
             process.pneumaticPusher = pusher;
             process.acceptChute = acceptChute;
             process.rejectChute = rejectChute;
@@ -81,6 +82,12 @@ namespace ConveyorTwin
             process.fillingPitchM = 0.48f;
             process.fillingQueueStopZ = -2.45f;
             process.cappingZ = 3.2f;
+            process.cappingHeadCount = 4;
+            process.cappingFirstZ = 3.2f;
+            process.cappingPitchM = 0.48f;
+            process.cappingQueueStopZ = 2.75f;
+            process.cappingTimeSeconds = 0.75f;
+            process.acceptEndZ = 5.25f;
             process.starWheelPocketCount = 8;
             process.starWheelAngularSpeedDps = 120f;
             process.infeedMotorSpeedRpm = 18f;
@@ -148,19 +155,19 @@ namespace ConveyorTwin
             var floor = GameObject.CreatePrimitive(PrimitiveType.Cube);
             floor.name = "Factory Floor";
             floor.transform.SetParent(parent);
-            floor.transform.position = new Vector3(0f, -0.05f, 0f);
-            floor.transform.localScale = new Vector3(8f, 0.1f, 10f);
+            floor.transform.position = new Vector3(0f, -0.05f, 0.45f);
+            floor.transform.localScale = new Vector3(8f, 0.1f, 11.4f);
             floor.GetComponent<Renderer>().sharedMaterial = material;
         }
 
         private void CreateConveyor(Transform parent, Material beltMaterial, Material metalMaterial, Material slatMaterial, Material ribMaterial)
         {
-            CreateCube(parent, "Slat Chain Conveyor Base", new Vector3(0f, 0.38f, 0f), new Vector3(0.52f, 0.08f, 8.5f), beltMaterial);
+            CreateCube(parent, "Slat Chain Conveyor Base", new Vector3(0f, 0.38f, 0.55f), new Vector3(0.52f, 0.08f, 10.7f), beltMaterial);
 
             const float pitch = 0.22f;
             const float slatLength = 0.17f;
             const float startZ = -4.1f;
-            const int slatCount = 38;
+            const int slatCount = 48;
             for (var i = 0; i < slatCount; i++)
             {
                 var z = startZ + i * pitch;
@@ -173,9 +180,9 @@ namespace ConveyorTwin
                 }
             }
 
-            CreateCube(parent, "Left Narrow Guide Rail", new Vector3(-0.28f, 0.74f, 0f), new Vector3(0.035f, 0.1f, 8.5f), metalMaterial);
-            CreateCube(parent, "Right Narrow Guide Rail", new Vector3(0.28f, 0.74f, 0f), new Vector3(0.035f, 0.1f, 8.5f), metalMaterial);
-            CreateCube(parent, "Narrow Conveyor Support", new Vector3(0f, 0.2f, 0f), new Vector3(0.68f, 0.15f, 8.7f), metalMaterial);
+            CreateCube(parent, "Left Narrow Guide Rail", new Vector3(-0.28f, 0.74f, 0.55f), new Vector3(0.035f, 0.1f, 10.7f), metalMaterial);
+            CreateCube(parent, "Right Narrow Guide Rail", new Vector3(0.28f, 0.74f, 0.55f), new Vector3(0.035f, 0.1f, 10.7f), metalMaterial);
+            CreateCube(parent, "Narrow Conveyor Support", new Vector3(0f, 0.2f, 0.55f), new Vector3(0.68f, 0.15f, 10.9f), metalMaterial);
         }
 
         private Transform CreateTurntable(Transform parent, Material material)
@@ -403,28 +410,51 @@ namespace ConveyorTwin
             return starWheelRoot.transform;
         }
 
-        private Transform CreateCappingStation(Transform parent, Material metalMaterial, Material capMaterial)
+        private List<Transform> CreateCappingStation(Transform parent, Material metalMaterial, Material capMaterial)
         {
-            CreateCube(parent, "Capping Station Frame", new Vector3(-0.42f, 1.24f, 3.2f), new Vector3(0.08f, 0.9f, 0.08f), metalMaterial);
-            CreateCube(parent, "Capping Station Arm", new Vector3(-0.18f, 1.48f, 3.2f), new Vector3(0.5f, 0.08f, 0.08f), metalMaterial);
+            var heads = new List<Transform>();
+            const int headCount = 4;
+            const float firstZ = 3.2f;
+            const float pitch = 0.48f;
+            const float centerZ = firstZ + pitch * 1.5f;
 
-            var head = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-            head.name = "Capping Head";
-            head.transform.SetParent(parent);
-            head.transform.position = new Vector3(0f, 1.1f, 3.2f);
-            head.transform.localScale = new Vector3(0.1f, 0.18f, 0.1f);
-            head.GetComponent<Renderer>().sharedMaterial = metalMaterial;
+            CreateCube(parent, "Capping Station Frame Left", new Vector3(-0.42f, 1.24f, centerZ), new Vector3(0.08f, 0.9f, 2.15f), metalMaterial);
+            CreateCube(parent, "Capping Station Frame Right", new Vector3(0.42f, 1.24f, centerZ), new Vector3(0.08f, 0.9f, 2.15f), metalMaterial);
+            CreateCube(parent, "Capping Head Rail", new Vector3(0f, 1.48f, centerZ), new Vector3(0.72f, 0.08f, 2.1f), metalMaterial);
+
+            for (var i = 0; i < headCount; i++)
+            {
+                var z = firstZ + i * pitch;
+                CreateCube(parent, $"Capping Spring {i + 1}", new Vector3(0f, 1.34f, z), new Vector3(0.08f, 0.18f, 0.08f), metalMaterial);
+
+                var head = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                head.name = $"Capping Head {i + 1}";
+                head.transform.SetParent(parent);
+                head.transform.position = new Vector3(0f, 1.1f, z);
+                head.transform.localScale = new Vector3(0.1f, 0.18f, 0.1f);
+                head.GetComponent<Renderer>().sharedMaterial = metalMaterial;
+                heads.Add(head.transform);
+
+                var capReady = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                capReady.name = $"Queued Cap {i + 1}";
+                capReady.transform.SetParent(parent);
+                capReady.transform.position = new Vector3(0f, 0.98f, z);
+                capReady.transform.localScale = new Vector3(0.07f, 0.018f, 0.07f);
+                capReady.GetComponent<Renderer>().sharedMaterial = capMaterial;
+
+                CreateCube(parent, $"Capping Bottle Stop {i + 1}", new Vector3(-0.22f, 0.78f, z), new Vector3(0.07f, 0.18f, 0.12f), metalMaterial);
+            }
 
             var capFeed = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             capFeed.name = "Cap Feeder Bowl";
             capFeed.transform.SetParent(parent);
-            capFeed.transform.position = new Vector3(0.72f, 1.2f, 3.2f);
+            capFeed.transform.position = new Vector3(0.82f, 1.2f, centerZ);
             capFeed.transform.localScale = new Vector3(0.32f, 0.12f, 0.32f);
             capFeed.GetComponent<Renderer>().sharedMaterial = capMaterial;
 
-            CreateCube(parent, "Cap Feed Rail", new Vector3(0.36f, 1.28f, 3.2f), new Vector3(0.7f, 0.04f, 0.05f), metalMaterial);
+            CreateCube(parent, "Cap Feed Rail", new Vector3(0.4f, 1.28f, centerZ), new Vector3(0.75f, 0.04f, 2f), metalMaterial);
 
-            return head.transform;
+            return heads;
         }
 
         private GameObject CreateCube(Transform parent, string name, Vector3 position, Vector3 scale, Material material)
@@ -449,9 +479,9 @@ namespace ConveyorTwin
                 cameraObject.AddComponent<AudioListener>();
             }
 
-            camera.transform.position = new Vector3(4.3f, 3.5f, -6.8f);
-            camera.transform.rotation = Quaternion.Euler(29f, -33f, 0f);
-            camera.fieldOfView = 56f;
+            camera.transform.position = new Vector3(4.8f, 3.7f, -7.4f);
+            camera.transform.rotation = Quaternion.Euler(29f, -32f, 0f);
+            camera.fieldOfView = 58f;
 
             var light = FindFirstObjectByType<Light>();
             if (light == null)

@@ -137,7 +137,7 @@ Digital Twin Data:
 Thiết bị sử dụng:
 
 ```text
-Capping Head
+4 x Capping Head
 Cap Feeder Bowl
 Cap Feed Rail
 ```
@@ -146,9 +146,15 @@ Logic vận hành:
 
 - Chỉ chai `PASSED` mới đi tới trạm đóng nắp.
 - Chai `REJECTED` bị piston đẩy xuống reject chute trước khi tới capping.
-- Khi chai đạt tới `cappingZ`, `Capping Head` hạ xuống.
-- Nắp chai được bật hiển thị trên bottle.
-- Sau khi đóng nắp, chai chuyển trạng thái `CAPPED` và đi tiếp tới `Accept Chute`.
+- 4 chai đạt chuẩn được index vào 4 vị trí `cappingFirstZ + slotIndex * cappingPitchM`.
+- Khi đủ 4 chai, conveyor dừng, 4 `Capping Head` cùng hạ xuống để đóng nắp.
+- Trong lúc đóng nắp, các chai được khóa vị trí giống cơ cấu stop/index nên không bị trôi hoặc đâm vào nhau.
+- Sau khi đóng nắp, nắp chai được bật hiển thị, chai chuyển trạng thái `CAPPED` và đi tiếp tới `Accept Chute`.
+
+Digital Twin Data:
+
+- `Bottles At Capping Station`: số chai đang index dưới cụm đóng nắp.
+- `Conveyor Stopped For Capping`: trạng thái conveyor dừng trong lúc đóng nắp.
 
 ## 3. QC Sensor Station
 

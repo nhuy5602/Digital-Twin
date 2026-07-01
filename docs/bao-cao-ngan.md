@@ -65,9 +65,9 @@ Chai đạt đi thẳng xuống máng accept. Chai lỗi đến vị trí piston
 
 ### Capping Station
 
-Thiết bị: `Capping Head`, `Cap Feeder Bowl`, `Cap Feed Rail`.
+Thiết bị: `4 x Capping Head`, `Cap Feeder Bowl`, `Cap Feed Rail`.
 
-Chỉ chai đạt chuẩn mới đi tới trạm đóng nắp. Chai lỗi bị loại trước đó tại reject station. Khi chai đạt đến vị trí `cappingZ`, capping head hạ xuống, nắp chai được bật hiển thị, chai chuyển trạng thái `CAPPED` rồi đi tiếp xuống accept chute.
+Chỉ chai đạt chuẩn mới đi tới trạm đóng nắp. Chai lỗi bị loại trước đó tại reject station. Cụm đóng nắp dùng 4 vị trí index giống cụm rót: khi đủ 4 chai, conveyor dừng, 4 capping head cùng hạ xuống, nắp chai được bật hiển thị, chai chuyển trạng thái `CAPPED` rồi đi tiếp xuống accept chute. Các chai đang chờ được giữ khoảng cách tối thiểu trên slat chain để tránh va chạm khi line dừng/chạy lại.
 
 ## 4. Công thức và logic
 
