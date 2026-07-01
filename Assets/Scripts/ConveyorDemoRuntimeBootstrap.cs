@@ -29,6 +29,8 @@ namespace ConveyorTwin
             var floorMaterial = CreateMaterial(new Color(0.42f, 0.42f, 0.40f));
             var beltMaterial = CreateMaterial(new Color(0.035f, 0.04f, 0.045f));
             var metalMaterial = CreateMaterial(new Color(0.55f, 0.57f, 0.58f));
+            var slatMaterial = CreateMaterial(new Color(0.78f, 0.72f, 0.62f));
+            var ribMaterial = CreateMaterial(new Color(0.42f, 0.42f, 0.38f));
             var bottleMaterial = CreateMaterial(new Color(0.82f, 0.95f, 1f, 0.35f));
             var waterMaterial = CreateMaterial(new Color(0.1f, 0.55f, 1f, 0.85f));
             var sensorMaterial = CreateMaterial(new Color(0.1f, 0.75f, 1f));
@@ -36,7 +38,7 @@ namespace ConveyorTwin
             var acceptMaterial = CreateMaterial(new Color(0.25f, 0.9f, 0.35f));
 
             CreateFloor(root.transform, floorMaterial);
-            CreateConveyor(root.transform, beltMaterial, metalMaterial);
+            CreateConveyor(root.transform, beltMaterial, metalMaterial, slatMaterial, ribMaterial);
             var turntable = CreateTurntable(root.transform, metalMaterial);
             var bottleSpawnPoint = CreateBottleDropper(root.transform, metalMaterial);
             var turntableOutlet = CreateTurntableOutlet(root.transform, metalMaterial);
@@ -63,6 +65,9 @@ namespace ConveyorTwin
             process.rejectChute = rejectChute;
             process.bottleTemplate = bottleTemplate;
             process.conveyorSpeedMps = 0.85f;
+            process.slatPitchM = 0.22f;
+            process.conveyorSlipRatio = 0.02f;
+            process.minimumBottleSpacingM = 0.46f;
             process.infeedMotorSpeedRpm = 18f;
             process.fillingTimeSeconds = 1.35f;
             process.properFillProbability = 0.9f;
@@ -132,19 +137,29 @@ namespace ConveyorTwin
             floor.GetComponent<Renderer>().sharedMaterial = material;
         }
 
-        private void CreateConveyor(Transform parent, Material beltMaterial, Material metalMaterial)
+        private void CreateConveyor(Transform parent, Material beltMaterial, Material metalMaterial, Material slatMaterial, Material ribMaterial)
         {
-            CreateCube(parent, "Slat Chain Conveyor Base", new Vector3(0f, 0.39f, 0f), new Vector3(0.54f, 0.08f, 8.5f), beltMaterial);
+            CreateCube(parent, "Slat Chain Conveyor Base", new Vector3(0f, 0.38f, 0f), new Vector3(0.52f, 0.08f, 8.5f), beltMaterial);
 
-            for (var i = 0; i < 42; i++)
+            const float pitch = 0.22f;
+            const float slatLength = 0.17f;
+            const float startZ = -4.1f;
+            const int slatCount = 38;
+            for (var i = 0; i < slatCount; i++)
             {
-                var z = -4.05f + i * 0.2f;
-                CreateCube(parent, "Modular Slat Plate", new Vector3(0f, 0.46f, z), new Vector3(0.48f, 0.035f, 0.16f), metalMaterial);
+                var z = startZ + i * pitch;
+                CreateCube(parent, "Modular Slat Plate", new Vector3(0f, 0.46f, z), new Vector3(0.46f, 0.035f, slatLength), slatMaterial);
+                CreateCube(parent, "Slat Gap Shadow", new Vector3(0f, 0.482f, z + slatLength * 0.5f + 0.017f), new Vector3(0.47f, 0.012f, 0.028f), beltMaterial);
+
+                if (i % 2 == 0)
+                {
+                    CreateCube(parent, "Anti Slip Cross Rib", new Vector3(0f, 0.515f, z - 0.055f), new Vector3(0.42f, 0.026f, 0.022f), ribMaterial);
+                }
             }
 
-            CreateCube(parent, "Left Narrow Guide Rail", new Vector3(-0.31f, 0.74f, 0f), new Vector3(0.04f, 0.1f, 8.5f), metalMaterial);
-            CreateCube(parent, "Right Narrow Guide Rail", new Vector3(0.31f, 0.74f, 0f), new Vector3(0.04f, 0.1f, 8.5f), metalMaterial);
-            CreateCube(parent, "Narrow Conveyor Support", new Vector3(0f, 0.2f, 0f), new Vector3(0.76f, 0.15f, 8.7f), metalMaterial);
+            CreateCube(parent, "Left Narrow Guide Rail", new Vector3(-0.28f, 0.74f, 0f), new Vector3(0.035f, 0.1f, 8.5f), metalMaterial);
+            CreateCube(parent, "Right Narrow Guide Rail", new Vector3(0.28f, 0.74f, 0f), new Vector3(0.035f, 0.1f, 8.5f), metalMaterial);
+            CreateCube(parent, "Narrow Conveyor Support", new Vector3(0f, 0.2f, 0f), new Vector3(0.68f, 0.15f, 8.7f), metalMaterial);
         }
 
         private Transform CreateTurntable(Transform parent, Material material)

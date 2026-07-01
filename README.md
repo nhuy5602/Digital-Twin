@@ -78,9 +78,19 @@ Digital Twin Data:
 Conveyor chính được dựng theo dạng **slat chain / modular conveyor**:
 
 - bề rộng được thu hẹp vừa kích thước chai,
-- mặt băng gồm nhiều tấm `Modular Slat Plate`,
+- mặt băng gồm nhiều tấm `Modular Slat Plate` chia khoảng đều theo `slatPitchM`,
+- giữa các slat có `Slat Gap Shadow` để nhìn rõ khe chia như slat chain thật,
+- có `Anti Slip Cross Rib` đặt cách quãng để giảm trượt bề mặt,
 - hai ray dẫn hướng giữ chai đi đúng một hàng,
 - chai từ outlet của turntable đi vào giữa conveyor.
+
+Logic chống trượt:
+
+```text
+effectiveSpeed = conveyorSpeed * (1 - conveyorSlipRatio)
+```
+
+Trong demo, `conveyorSlipRatio = 0.02`, nghĩa là chai gần như bám theo slat chain và chỉ mất khoảng 2% vận tốc do trượt bề mặt. Chai cũng được giữ khoảng cách tối thiểu `minimumBottleSpacingM` để không chồng lên nhau trên conveyor hẹp.
 
 ## 2. Filling Station
 
@@ -162,6 +172,7 @@ HUD trong game hiển thị:
 - Infeed motor speed, rpm.
 - Turntable buffer và số chai trên conveyor.
 - `omega` và `a_c rim` của turntable.
+- Slat pitch và slip ratio của conveyor.
 - Vessel liquid level, L.
 - Filling time, s.
 - Inspection status.

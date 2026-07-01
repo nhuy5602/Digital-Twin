@@ -119,3 +119,11 @@ Dữ liệu hiển thị thêm trên HUD:
 ## 7. Conveyor
 
 Conveyor chính được đổi sang dạng **slat chain/modular conveyor**. Băng tải được thu hẹp theo kích thước chai và gồm nhiều tấm `Modular Slat Plate`, hai bên có guide rail để giữ chai chạy một hàng.
+
+Các tấm slat được chia khoảng theo `slatPitchM`, có khe `Slat Gap Shadow` và các gờ `Anti Slip Cross Rib`. Logic chuyển động dùng hệ số trượt nhỏ:
+
+```text
+effectiveSpeed = conveyorSpeed * (1 - conveyorSlipRatio)
+```
+
+Trong demo, `conveyorSlipRatio = 0.02`, giúp chai gần như bám theo slat chain và ít bị trượt bề mặt.

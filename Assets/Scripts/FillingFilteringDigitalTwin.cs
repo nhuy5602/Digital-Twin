@@ -35,6 +35,12 @@ namespace ConveyorTwin
         public float acceptEndZ = 4.1f;
         public float lineX = 0f;
 
+        [Header("Slat chain conveyor")]
+        public float slatPitchM = 0.22f;
+        [Range(0f, 0.25f)] public float conveyorSlipRatio = 0.02f;
+        public float minimumBottleSpacingM = 0.46f;
+        public float ConveyorEffectiveSpeedMps => conveyorSpeedMps * (1f - conveyorSlipRatio);
+
         [Header("Turntable buffer")]
         public Vector3 turntableCenter = new Vector3(0f, 0.82f, -4.7f);
         public float turntableRadius = 0.95f;
@@ -358,9 +364,35 @@ namespace ConveyorTwin
                     continue;
                 }
 
-                position.z += conveyorSpeedMps * Time.deltaTime;
+                position.z += ConveyorEffectiveSpeedMps * Time.deltaTime;
+                position.z = KeepBottleSpacing(bottle, position.z);
                 bottle.transform.position = position;
             }
+        }
+
+        private float KeepBottleSpacing(BottleProcessState currentBottle, float candidateZ)
+        {
+            var nearestAheadZ = float.PositiveInfinity;
+            foreach (var otherBottle in lineBottles)
+            {
+                if (otherBottle == null || otherBottle == currentBottle || fillingBottles.Contains(otherBottle) || pushingBottles.Contains(otherBottle))
+                {
+                    continue;
+                }
+
+                var otherZ = otherBottle.transform.position.z;
+                if (otherZ > candidateZ && otherZ < nearestAheadZ)
+                {
+                    nearestAheadZ = otherZ;
+                }
+            }
+
+            if (float.IsPositiveInfinity(nearestAheadZ))
+            {
+                return candidateZ;
+            }
+
+            return Mathf.Min(candidateZ, nearestAheadZ - minimumBottleSpacingM);
         }
 
         private IEnumerator FillBottle(BottleProcessState bottle)
