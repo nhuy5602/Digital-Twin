@@ -1,128 +1,192 @@
-# Digital Twin Bang Chuyen Hang Hoa
+# Digital Twin: Filling & Filtering Line
 
-Du an nay la khung mo phong băng chuyền hàng hóa theo hai mức:
+Project Unity mô phỏng quy trình **filling & filtering** cho dây chuyền chai nước.
 
-- **Digital Model**: mô hình chạy bằng tham số nhập tay như tốc độ băng, tải trọng, khối lượng băng, ma sát.
-- **Digital Shadow**: mô hình nhận dữ liệu telemetry một chiều từ cảm biến/nguồn dữ liệu. Trong bản mẫu, `TwinTelemetrySimulator` giả lập dữ liệu cảm biến theo thời gian.
-
-Project Unity hoàn chỉnh nằm ngay trong repo này. Scene demo chính là:
+Scene chính:
 
 ```text
 Assets/Scenes/SampleScene.unity
 ```
 
-Các script chính nằm trong:
+Script chính:
 
 ```text
-Assets/Scripts
+Assets/Scripts/FillingFilteringDigitalTwin.cs
+Assets/Scripts/BottleProcessState.cs
+Assets/Scripts/FillingFilteringHud.cs
+Assets/Scripts/ConveyorDemoRuntimeBootstrap.cs
 ```
 
-## Chay demo nhanh trong Unity
+## Cách chạy demo
 
 1. Mở Unity Hub.
-2. Chọn **Add project from disk**.
-3. Chọn thư mục project:
+2. Add project từ thư mục:
 
 ```text
 D:\Học thạc sĩ\IT6019\Conveyor-Digital-Twin
 ```
 
-4. Mở project bằng Unity `6000.5.0f1` hoặc Unity 6 tương đương.
-5. Trong Unity, mở scene:
+3. Mở scene:
 
 ```text
 Assets > Scenes > SampleScene
 ```
 
-6. Bấm nút **Play**.
-
-Trong scene đã có object:
-
-```text
-Conveyor Demo Bootstrap
-```
-
-Object này gắn script `ConveyorDemoRuntimeBootstrap`. Khi scene được mở hoặc khi bấm **Play**, script sẽ tự tạo mô hình demo gồm băng chuyền, puly, kiện hàng, sensor, nguồn telemetry và HUD.
-
-Nếu scene chưa hiện mô hình băng chuyền trong cửa sổ Scene/Game, vào menu:
+4. Nếu muốn dựng lại scene tự động, chọn menu:
 
 ```text
 Tools > Conveyor Twin > Build Demo Scene
 ```
 
-Menu này dùng script `ConveyorDemoSceneBuilder` để dựng và lưu lại scene demo. Sau đó bấm **Play** lại.
+5. Bấm **Play**.
 
-## Scene demo co gi
+Khi chạy, các chai sẽ đi qua infeed, trạm chiết rót, trạm QC, trạm phân loại. Chai đạt sẽ đi thẳng xuống Accept Chute. Chai lỗi sẽ bị Pneumatic Pusher đẩy sang Reject Chute.
 
-Scene đã dựng sẵn các đối tượng:
+## 1. Bottle Infeed Station
 
-- `Conveyor Belt - Digital Shadow`: mặt băng chuyền chính.
-- `Telemetry Source - Digital Shadow`: nguồn dữ liệu giả lập cảm biến.
-- `HUD - Twin Metrics`: bảng thông số digital twin khi chạy.
-- `Input Sensor` và `Output Sensor`: cảm biến đếm kiện hàng.
-- `Package 01` đến `Package 05`: kiện hàng có Rigidbody và mô phỏng ma sát.
-- Các cube hàng hóa tự chạy dọc theo băng chuyền. Khi tới cuối băng, chúng tự quay lại đầu băng để demo chạy liên tục.
-- `Input Pulley`, `Output Pulley`: puly hai đầu băng chuyền.
-- chân đỡ, ray đỡ và sàn nhà xưởng.
-
-Khi bấm **Play**, HUD sẽ hiển thị:
-
-- chế độ `DigitalShadow`,
-- tốc độ băng chuyền,
-- vận tốc góc puly,
-- tải trọng,
-- lực kéo,
-- công suất mô hình và công suất đo,
-- năng suất kiện/giờ,
-- trạng thái `NORMAL`, `OVERLOAD`, `OVERSPEED` hoặc `EMERGENCY STOP`.
-
-## Chuyen dong kien hang
-
-Script `ConveyorPackage` có chế độ demo:
+Thiết bị sử dụng:
 
 ```text
-forceKinematicMotion = true
-loopOnBelt = true
-startZ = -2.75
-endZ = 2.75
+Infeed Turntable
 ```
 
-Ở chế độ này, kiện hàng chạy theo tốc độ telemetry của băng chuyền. Công thức vật lý vẫn được dùng để ước lượng trượt:
+Logic vận hành:
+
+- Mâm quay chứa chai rỗng.
+- Mâm quay xoay liên tục để mô phỏng cấp chai vào băng chuyền.
+- Chai rỗng lần lượt đi vào line chính.
+
+Digital Twin Data:
+
+- `Throughput`: năng suất chai/giờ.
+- `Infeed Motor Speed`: tốc độ mô-tơ cấp liệu, đơn vị rpm.
+
+## 2. Filling Station
+
+Thiết bị sử dụng:
 
 ```text
-F_required = m * a
-F_max = mu_s * m * g
+Filling Nozzle
+Liquid Vessel
 ```
 
-Nếu `F_required > F_max`, script đánh dấu kiện hàng đang trượt qua biến `IsSlipping`.
+Logic vận hành:
 
-## Cong thuc vat ly ap dung
+- Khi chai đến `Filling Trigger Zone`, chai tạm dừng tại vị trí vòi rót.
+- Vòi phun kích hoạt dòng chảy.
+- Chai được rót trong thời gian `fillingTimeSeconds`.
+- Sau khi rót xong, chai tiếp tục chạy sang trạm QC.
 
-Các công thức chính đang được dùng trong `ConveyorBeltDigitalTwin.cs`:
+Logic lỗi tạo điểm nhấn:
 
-- Vận tốc góc puly: `omega = v / r`
-- Lực cản ma sát gần đúng trên băng ngang: `F = mu * m * g`
-- Công suất cơ học cần thiết: `P = F * v / eta`
-- Mô men kéo gần đúng: `tau = F * r`
-- Năng suất: `packagesPerHour = packagesPerMinute * 60`
+- 90% chai được rót chuẩn: `Properly Filled = 100%`.
+- 10% chai bị lỗi thiếu nước do nghẹt vòi: `Underfilled = 50-60%`.
 
-Trong `ConveyorPackage.cs`, kiện hàng được kéo bởi lực ma sát:
+Digital Twin Data:
 
-- Lực cần để kéo kiện theo tốc độ băng: `F_required = m * a`
-- Lực ma sát tĩnh cực đại: `F_max = mu_s * m * g`
-- Nếu `F_required > F_max`, kiện bị đánh dấu là trượt.
+- `Liquid Level`: mức chất lỏng còn lại trong bồn tổng.
+- `Filling Time`: thời gian rót gần nhất.
 
-## Cach dung thu cong trong Unity
+## 3. QC Sensor Station
 
-Phần này chỉ cần dùng nếu muốn tự dựng lại từ đầu.
+Thiết bị sử dụng:
 
-1. Tạo một scene mới.
-2. Tạo object `ConveyorBelt`.
-3. Thêm component `ConveyorBeltDigitalTwin`.
-4. Tạo một cube làm mặt băng chuyền, gán vào `beltSurface` và `beltRenderer`.
-5. Thêm object `TelemetrySource`, gắn component `TwinTelemetrySimulator`.
-6. Kéo `TelemetrySource` vào trường `telemetrySource` của `ConveyorBeltDigitalTwin`.
-7. Tạo object `HUD`, gắn `TwinMetricsHud`, rồi kéo `ConveyorBelt` vào trường `belt`.
-8. Với kiện hàng, tạo cube có `Rigidbody`, `Collider`, gắn `ConveyorPackage`, rồi kéo `ConveyorBelt` vào trường `belt`.
+```text
+Photoelectric Sensor / Virtual Vision Sensor
+```
 
+Logic vận hành:
+
+- Chai đi qua tia quét của cảm biến.
+- Cảm biến đọc biến `liquidVolume01` của từng chai.
+- Quy tắc kiểm tra:
+
+```text
+Volume >= 95%  => PASSED
+Volume < 95%   => REJECTED
+```
+
+Digital Twin Data:
+
+- `Inspection Status = Normal` nếu chai đạt.
+- `Inspection Status = AnomalyDetected` nếu phát hiện chai thiếu nước.
+
+## 4. Sorting & Rejection Station
+
+Thiết bị sử dụng:
+
+```text
+Pneumatic Pusher
+Sliding Chute
+Accept Chute
+Reject Chute
+```
+
+Logic vận hành:
+
+- Chai `PASSED` tiếp tục chạy thẳng đến cuối băng tải và trượt xuống `Accept Chute`.
+- Chai `REJECTED` khi đến vị trí piston sẽ gọi logic `TriggerPusher()`.
+- Piston lao ra, đẩy chai lỗi sang `Reject Chute`, sau đó co về.
+
+Digital Twin Data:
+
+- `Total Passed`: tổng chai đạt.
+- `Total Rejected`: tổng chai lỗi.
+
+## Dashboard
+
+HUD trong game hiển thị:
+
+- Infeed throughput, bottles/hour.
+- Infeed motor speed, rpm.
+- Vessel liquid level, L.
+- Filling time, s.
+- Inspection status.
+- Total passed.
+- Total rejected.
+- Rule kiểm tra: `volume >= 95%`.
+
+## Công thức và logic mô phỏng
+
+Năng suất:
+
+```text
+Throughput = completedBottleCount / elapsedTimeHours
+```
+
+Tỉ lệ chất lỏng trong chai:
+
+```text
+liquidVolume01 = currentVolume / bottleCapacity
+```
+
+Quy tắc QC:
+
+```text
+if liquidVolume01 >= 0.95:
+    status = PASSED
+else:
+    status = REJECTED
+```
+
+Mức chất lỏng bồn tổng:
+
+```text
+LiquidLevel = LiquidLevel - filledVolume * bottleCapacityLiters
+```
+
+Logic xác suất lỗi:
+
+```text
+90% => volume = 1.0
+10% => volume = random(0.5, 0.6)
+```
+
+## File quan trọng
+
+- `FillingFilteringDigitalTwin.cs`: điều phối toàn bộ quy trình.
+- `BottleProcessState.cs`: lưu trạng thái từng chai, volume, pass/reject.
+- `FillingFilteringHud.cs`: dashboard digital twin.
+- `ConveyorDemoRuntimeBootstrap.cs`: tự dựng scene demo khi mở/chạy scene.
+- `ConveyorDemoSceneBuilder.cs`: menu editor để dựng lại scene.
 

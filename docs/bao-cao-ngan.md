@@ -1,118 +1,87 @@
-# Bao cao ngan: Digital Twin bang chuyen hang hoa
+# Báo cáo ngắn: Digital Twin quy trình Filling & Filtering
 
-## 1. Muc tieu
+## 1. Mục tiêu
 
-Xây dựng mô hình digital twin cho hệ thống băng chuyền hàng hóa nhằm mô phỏng chuyển động, theo dõi trạng thái vận hành và cảnh báo khi có hiện tượng quá tải hoặc quá tốc.
+Xây dựng mô hình digital twin cho dây chuyền chiết rót và kiểm tra chất lượng chai nước. Mô hình thể hiện bốn trạm chính: cấp chai, chiết rót, kiểm tra chất lượng và phân loại loại biên.
 
-## 2. Muc do digital twin
+## 2. Mức độ digital twin
 
-### Digital Model
+Mô hình đạt mức **Digital Shadow** vì dữ liệu vận hành được mô phỏng và cập nhật một chiều vào mô hình Unity:
 
-Ở mức Digital Model, mô hình Unity hoạt động bằng các tham số cấu hình thủ công:
+- năng suất chai/giờ,
+- tốc độ mô-tơ cấp chai,
+- mức chất lỏng trong bồn,
+- thời gian rót,
+- trạng thái kiểm tra QC,
+- tổng chai đạt,
+- tổng chai lỗi.
 
-- tốc độ băng chuyền,
-- tải trọng hàng hóa,
-- khối lượng băng,
-- bán kính puly,
-- hệ số ma sát,
-- hiệu suất động cơ.
+## 3. Quy trình
 
-Dữ liệu không tự động đồng bộ từ hệ thống thật.
+### Bottle Infeed Station
 
-### Digital Shadow
+Thiết bị: `Infeed Turntable`.
 
-Ở mức Digital Shadow, mô hình nhận dữ liệu một chiều từ nguồn telemetry. Trong bản mẫu, script `TwinTelemetrySimulator` giả lập dữ liệu cảm biến gồm:
+Mâm quay mô phỏng việc cấp chai rỗng vào băng chuyền theo thứ tự. Dữ liệu theo dõi gồm throughput và tốc độ mô-tơ cấp liệu.
 
-- tốc độ băng,
-- tải trọng,
-- số kiện/phút,
-- mô men động cơ,
-- công suất đo được,
-- trạng thái dừng khẩn cấp.
+### Filling Station
 
-Khi có dữ liệu thật, nguồn giả lập có thể thay bằng dữ liệu từ PLC, MQTT, OPC UA, REST API hoặc file CSV.
+Thiết bị: `Filling Nozzle` và `Liquid Vessel`.
 
-## 3. Thanh phan he thong
+Khi chai đến vùng rót, chai dừng lại trong thời gian `fillingTimeSeconds`. Hệ thống mô phỏng:
 
-- `ConveyorBeltDigitalTwin`: lõi mô phỏng băng chuyền và tính toán vật lý.
-- `TwinTelemetrySimulator`: giả lập dòng dữ liệu cảm biến cho chế độ Digital Shadow.
-- `ConveyorPackage`: mô phỏng kiện hàng chịu lực ma sát từ băng.
-- `ConveyorSensor`: đếm kiện hàng đi qua vùng cảm biến.
-- `TwinMetricsHud`: hiển thị thông số vận hành trong Unity.
+- 90% chai được rót đủ 100% dung tích,
+- 10% chai bị underfilled, chỉ đạt 50-60% dung tích.
 
-## 4. Cong thuc vat ly
+### QC Sensor Station
 
-### Van toc goc puly
+Thiết bị: cảm biến quang/vision sensor ảo.
+
+Quy tắc kiểm tra:
 
 ```text
-omega = v / r
+Volume >= 95% => PASSED
+Volume < 95%  => REJECTED
 ```
 
-Trong đó:
+### Sorting & Rejection Station
 
-- `omega`: vận tốc góc của puly, đơn vị rad/s,
-- `v`: vận tốc dài của băng, đơn vị m/s,
-- `r`: bán kính puly, đơn vị m.
+Thiết bị: `Pneumatic Pusher`, `Accept Chute`, `Reject Chute`.
 
-### Luc can ma sat
+Chai đạt đi thẳng xuống máng accept. Chai lỗi đến vị trí piston sẽ được pusher đẩy sang máng reject.
+
+## 4. Công thức và logic
+
+Năng suất:
 
 ```text
-F = mu * m * g
+Throughput = completedBottleCount / elapsedTimeHours
 ```
 
-Trong đó:
-
-- `F`: lực kéo cần để thắng ma sát, đơn vị N,
-- `mu`: hệ số ma sát lăn/gần đúng,
-- `m`: tổng khối lượng chuyển động gồm băng và hàng, đơn vị kg,
-- `g`: gia tốc trọng trường, xấp xỉ 9.81 m/s2.
-
-### Cong suat dong co
+Mức đầy của chai:
 
 ```text
-P = F * v / eta
+liquidVolume01 = currentVolume / bottleCapacity
 ```
 
-Trong đó:
-
-- `P`: công suất cần thiết, đơn vị W,
-- `F`: lực kéo, đơn vị N,
-- `v`: tốc độ băng, đơn vị m/s,
-- `eta`: hiệu suất động cơ.
-
-### Mo men keo
+Mức chất lỏng bồn tổng:
 
 ```text
-tau = F * r
+LiquidLevel = LiquidLevel - filledVolume * bottleCapacityLiters
 ```
 
-Trong đó:
-
-- `tau`: mô men tại puly, đơn vị N.m,
-- `F`: lực kéo, đơn vị N,
-- `r`: bán kính puly, đơn vị m.
-
-### Nang suat van chuyen
+Logic xác suất:
 
 ```text
-Q = packagesPerMinute * 60
+P(properly filled) = 0.9
+P(underfilled) = 0.1
 ```
 
-`Q` là số kiện hàng mỗi giờ.
+## 5. Thành phần Unity
 
-## 5. Canh bao
-
-Mô hình sinh cảnh báo khi:
-
-- tải trọng hiện tại lớn hơn tải trọng an toàn,
-- tốc độ băng lớn hơn tốc độ an toàn,
-- kiện hàng cần lực kéo lớn hơn lực ma sát tĩnh cực đại nên có nguy cơ trượt.
-
-## 6. Huong phat trien
-
-- Kết nối dữ liệu thật từ PLC hoặc cảm biến cân tải.
-- Thêm thuật toán dự báo quá tải.
-- Lưu lịch sử vận hành vào CSV/database.
-- Thêm biểu đồ thời gian thực.
-- Điều khiển ngược về hệ thống thật để nâng cấp từ Digital Shadow lên Digital Twin đầy đủ.
+- `FillingFilteringDigitalTwin.cs`: điều phối logic dây chuyền.
+- `BottleProcessState.cs`: lưu thể tích, trạng thái và kết quả QC của từng chai.
+- `FillingFilteringHud.cs`: hiển thị dashboard.
+- `ConveyorDemoRuntimeBootstrap.cs`: tự dựng mô hình trực quan trong scene.
+- `ConveyorDemoSceneBuilder.cs`: menu editor để dựng lại scene.
 
