@@ -46,7 +46,7 @@ namespace ConveyorTwin
             var vesselParts = CreateLiquidVessel(root.transform, metalMaterial, waterMaterial);
             var nozzles = CreateFillingNozzles(root.transform, metalMaterial, waterMaterial);
             var fillingStopGate = CreateFillingStopGate(root.transform, metalMaterial, rejectMaterial);
-            var starWheel = CreateFillingStarWheel(root.transform, starWheelMaterial, metalMaterial);
+            var starWheel = CreateFillingStarWheel(root.transform, starWheelMaterial, metalMaterial, beltMaterial);
             var qcBeam = CreateQcSensor(root.transform, sensorMaterial, metalMaterial);
             var cappingHeads = CreateCappingStation(root.transform, metalMaterial, waterMaterial);
             var pusher = CreatePusher(root.transform, metalMaterial, rejectMaterial);
@@ -366,36 +366,43 @@ namespace ConveyorTwin
             hud.size = new Vector2(580f, 325f);
         }
 
-        private Transform CreateFillingStarWheel(Transform parent, Material wheelMaterial, Material metalMaterial)
+        private Transform CreateFillingStarWheel(Transform parent, Material wheelMaterial, Material metalMaterial, Material pocketMaterial)
         {
             var starWheelRoot = new GameObject("Filling Star Wheel");
             starWheelRoot.transform.SetParent(parent);
-            starWheelRoot.transform.position = new Vector3(0f, 0.55f, -1.23f);
+            starWheelRoot.transform.position = new Vector3(0.58f, 0.72f, -1.23f);
 
-            var disc = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-            disc.name = "Star Wheel Disc";
+            var disc = new GameObject("Scalloped Star Wheel Disc");
             disc.transform.SetParent(starWheelRoot.transform);
             disc.transform.localPosition = Vector3.zero;
-            disc.transform.localScale = new Vector3(0.72f, 0.055f, 0.72f);
-            disc.GetComponent<Renderer>().sharedMaterial = wheelMaterial;
+            var meshFilter = disc.AddComponent<MeshFilter>();
+            meshFilter.sharedMesh = CreateScallopedStarWheelMesh(16, 1.02f, 0.22f, 0.08f, 10);
+            disc.AddComponent<MeshRenderer>().sharedMaterial = wheelMaterial;
 
-            const int pockets = 14;
+            var hub = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            hub.name = "Star Wheel Center Hub";
+            hub.transform.SetParent(starWheelRoot.transform);
+            hub.transform.localPosition = new Vector3(0f, 0.055f, 0f);
+            hub.transform.localScale = new Vector3(0.14f, 0.055f, 0.14f);
+            hub.GetComponent<Renderer>().sharedMaterial = metalMaterial;
+
+            const int pockets = 16;
             for (var i = 0; i < pockets; i++)
             {
                 var angle = i * Mathf.PI * 2f / pockets;
                 var pocket = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-                pocket.name = $"Star Wheel Pocket Cutout {i + 1}";
+                pocket.name = $"Star Wheel Rim Pocket Shadow {i + 1}";
                 pocket.transform.SetParent(starWheelRoot.transform);
-                pocket.transform.position = starWheelRoot.transform.position + new Vector3(Mathf.Cos(angle) * 0.66f, 0.07f, Mathf.Sin(angle) * 0.66f);
-                pocket.transform.localScale = new Vector3(0.09f, 0.02f, 0.09f);
-                pocket.GetComponent<Renderer>().sharedMaterial = metalMaterial;
+                pocket.transform.localPosition = new Vector3(Mathf.Cos(angle) * 0.88f, 0.065f, Mathf.Sin(angle) * 0.88f);
+                pocket.transform.localScale = new Vector3(0.115f, 0.012f, 0.115f);
+                pocket.GetComponent<Renderer>().sharedMaterial = pocketMaterial;
 
                 var divider = CreateCube(
                     starWheelRoot.transform,
-                    $"Star Wheel Pocket Divider {i + 1}",
-                    starWheelRoot.transform.position + new Vector3(Mathf.Cos(angle + 0.11f) * 0.58f, 0.075f, Mathf.Sin(angle + 0.11f) * 0.58f),
-                    new Vector3(0.035f, 0.035f, 0.16f),
-                    metalMaterial);
+                    $"Star Wheel Pocket Tooth {i + 1}",
+                    starWheelRoot.transform.position + new Vector3(Mathf.Cos(angle + 0.09f) * 0.78f, 0.075f, Mathf.Sin(angle + 0.09f) * 0.78f),
+                    new Vector3(0.05f, 0.045f, 0.18f),
+                    wheelMaterial);
                 divider.transform.rotation = Quaternion.Euler(0f, -angle * Mathf.Rad2Deg, 0f);
             }
 
@@ -404,10 +411,83 @@ namespace ConveyorTwin
             for (var i = 0; i < 4; i++)
             {
                 var z = firstZ + i * pitch;
-                CreateCube(parent, $"Star Wheel Bottle Pocket Guide {i + 1}", new Vector3(-0.22f, 0.78f, z), new Vector3(0.08f, 0.2f, 0.12f), metalMaterial);
+                var localPocketPosition = new Vector3(-0.58f, 0.072f, z + 1.23f);
+
+                var socket = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                socket.name = $"Indexed Bottle Pocket Socket {i + 1}";
+                socket.transform.SetParent(starWheelRoot.transform);
+                socket.transform.localPosition = localPocketPosition;
+                socket.transform.localScale = new Vector3(0.16f, 0.014f, 0.16f);
+                socket.GetComponent<Renderer>().sharedMaterial = pocketMaterial;
+
+                CreateCube(starWheelRoot.transform, $"Star Wheel Pocket Jaw A {i + 1}", starWheelRoot.transform.position + localPocketPosition + new Vector3(-0.11f, 0.04f, -0.15f), new Vector3(0.24f, 0.07f, 0.055f), wheelMaterial);
+                CreateCube(starWheelRoot.transform, $"Star Wheel Pocket Jaw B {i + 1}", starWheelRoot.transform.position + localPocketPosition + new Vector3(-0.11f, 0.04f, 0.15f), new Vector3(0.24f, 0.07f, 0.055f), wheelMaterial);
+                CreateCube(parent, $"Fixed Star Wheel Back Guide {i + 1}", new Vector3(-0.27f, 0.82f, z), new Vector3(0.055f, 0.24f, 0.24f), metalMaterial);
             }
 
+            CreateCube(parent, "Star Wheel Guard Rail", new Vector3(-0.23f, 0.9f, -1.23f), new Vector3(0.05f, 0.18f, 1.75f), metalMaterial);
             return starWheelRoot.transform;
+        }
+
+        private Mesh CreateScallopedStarWheelMesh(int pocketCount, float outerRadius, float pocketDepth, float thickness, int samplesPerPocket)
+        {
+            var ringCount = pocketCount * samplesPerPocket;
+            var vertices = new Vector3[2 + ringCount * 2];
+            var triangles = new List<int>(ringCount * 12);
+            var pocketAngle = Mathf.PI * 2f / pocketCount;
+            var halfPocketWidth = pocketAngle * 0.36f;
+
+            vertices[0] = new Vector3(0f, thickness * 0.5f, 0f);
+            vertices[1] = new Vector3(0f, -thickness * 0.5f, 0f);
+
+            for (var i = 0; i < ringCount; i++)
+            {
+                var angle = i * Mathf.PI * 2f / ringCount;
+                var centered = Mathf.Repeat(angle + pocketAngle * 0.5f, pocketAngle) - pocketAngle * 0.5f;
+                var pocketRatio = Mathf.Clamp01(Mathf.Abs(centered) / halfPocketWidth);
+                var cutAmount = Mathf.Cos(pocketRatio * Mathf.PI * 0.5f);
+                var radius = outerRadius - pocketDepth * cutAmount * cutAmount;
+                var x = Mathf.Cos(angle) * radius;
+                var z = Mathf.Sin(angle) * radius;
+
+                vertices[2 + i] = new Vector3(x, thickness * 0.5f, z);
+                vertices[2 + ringCount + i] = new Vector3(x, -thickness * 0.5f, z);
+            }
+
+            for (var i = 0; i < ringCount; i++)
+            {
+                var next = (i + 1) % ringCount;
+                var top = 2 + i;
+                var nextTop = 2 + next;
+                var bottom = 2 + ringCount + i;
+                var nextBottom = 2 + ringCount + next;
+
+                triangles.Add(0);
+                triangles.Add(nextTop);
+                triangles.Add(top);
+
+                triangles.Add(1);
+                triangles.Add(bottom);
+                triangles.Add(nextBottom);
+
+                triangles.Add(top);
+                triangles.Add(nextTop);
+                triangles.Add(nextBottom);
+
+                triangles.Add(top);
+                triangles.Add(nextBottom);
+                triangles.Add(bottom);
+            }
+
+            var mesh = new Mesh
+            {
+                name = "Scalloped Star Wheel Mesh",
+                vertices = vertices,
+                triangles = triangles.ToArray()
+            };
+            mesh.RecalculateNormals();
+            mesh.RecalculateBounds();
+            return mesh;
         }
 
         private List<Transform> CreateCappingStation(Transform parent, Material metalMaterial, Material capMaterial)

@@ -109,7 +109,8 @@ Logic vận hành:
 
 - Dây chuyền có 4 vòi rót đặt theo cụm `Filling Nozzle 1..4`.
 - Conveyor đưa lần lượt 4 chai vào đúng vị trí dưới 4 vòi.
-- `Filling Star Wheel` là đĩa tròn lớn có các pocket lõm quanh viền, dùng để index/giữ chai đúng vị trí dưới vòi.
+- `Filling Star Wheel` là đĩa bánh sao lớn có biên dạng scallop/pocket lõm quanh viền, trong Hierarchy gồm `Scalloped Star Wheel Disc` và `Indexed Bottle Pocket Socket 1..4`.
+- 4 pocket socket nằm ngay dưới 4 vòi rót để mô phỏng cơ cấu giữ cổ/thân chai theo kiểu star-wheel thật.
 - `Filling Stop Gate` chặn các chai phía sau chưa đến lượt fill.
 - Khi đủ 4 chai vào vị trí, conveyor dừng toàn bộ.
 - Star Wheel dừng và khóa chai ở đúng vị trí dưới vòi.

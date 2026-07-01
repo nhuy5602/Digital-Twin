@@ -39,7 +39,7 @@ Trong đó `omega` là vận tốc góc của mâm quay, `r` là khoảng cách 
 
 Thiết bị: cụm `Multiple Filling Nozzles`, `Liquid Vessel`, `Filling Stop Gate` và `Filling Star Wheel`.
 
-Khi chai đến vùng rót, Star Wheel dạng đĩa tròn lớn có các pocket lõm quanh mép sẽ quay để index chai vào pocket và đưa đủ 4 chai vào đúng vị trí dưới 4 vòi. Gate phía trước vùng filling chặn các chai chưa đến lượt. Khi đủ chai, conveyor dừng toàn bộ, Star Wheel khóa chai cố định tại slot và 4 vòi rót đồng thời trong thời gian `fillingTimeSeconds`. Nếu turntable đã đủ buffer trong lúc conveyor dừng, turntable cũng dừng để tránh tiếp tục cấp chai.
+Khi chai đến vùng rót, Star Wheel dạng đĩa bánh sao lớn có biên dạng scallop/pocket lõm quanh mép sẽ quay để index chai vào pocket và đưa đủ 4 chai vào đúng vị trí dưới 4 vòi. Trong Unity, cụm này được dựng bằng `Scalloped Star Wheel Disc` và `Indexed Bottle Pocket Socket 1..4` đặt ngay dưới cụm rót. Gate phía trước vùng filling chặn các chai chưa đến lượt. Khi đủ chai, conveyor dừng toàn bộ, Star Wheel khóa chai cố định tại slot và 4 vòi rót đồng thời trong thời gian `fillingTimeSeconds`. Nếu turntable đã đủ buffer trong lúc conveyor dừng, turntable cũng dừng để tránh tiếp tục cấp chai.
 
 Hệ thống mô phỏng:
 

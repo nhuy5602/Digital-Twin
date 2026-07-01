@@ -627,6 +627,11 @@ namespace ConveyorTwin
         private IEnumerator FillBottleBatch()
         {
             fillingStationBusy = true;
+            if (fillingStarWheel != null)
+            {
+                fillingStarWheel.localRotation = Quaternion.identity;
+            }
+
             var batch = new List<BottleProcessState>(fillingSlotAssignments.Keys);
             var targets = new Dictionary<BottleProcessState, float>();
 
