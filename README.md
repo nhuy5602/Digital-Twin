@@ -55,7 +55,15 @@ Logic vận hành:
 - Chai rỗng được sinh ra từ `Bottle Spawn Point` phía trên mâm.
 - Chai rơi xuống `Infeed Turntable`.
 - Mâm quay tự xoay tại chỗ như một buffer/caching table.
-- Khi số chai trong buffer đạt `releaseThreshold`, hệ thống tự xả từng chai qua `Turntable Outlet`.
+- Mô hình dùng công thức lực ly tâm gần đúng để đẩy chai dạt ra rìa barrier:
+
+```text
+omega = rpm * 2π / 60
+a_c = omega^2 * r
+```
+
+- Khi chai sát rìa barrier và đi vào vùng outlet, hệ thống tự xả chai qua `Turntable Outlet`.
+- Điều kiện xả chỉ bật khi số chai trong buffer đạt `releaseThreshold`.
 - Chai sau đó đi vào conveyor chính để đến trạm filling.
 
 Digital Twin Data:
@@ -63,6 +71,16 @@ Digital Twin Data:
 - `Throughput`: năng suất chai/giờ.
 - `Infeed Motor Speed`: tốc độ mô-tơ cấp liệu, đơn vị rpm.
 - `Turntable Buffer`: số chai đang nằm trên mâm chờ ra outlet.
+- `Centrifugal Acceleration`: gia tốc ly tâm tại rìa mâm.
+
+## Conveyor chính
+
+Conveyor chính được dựng theo dạng **slat chain / modular conveyor**:
+
+- bề rộng được thu hẹp vừa kích thước chai,
+- mặt băng gồm nhiều tấm `Modular Slat Plate`,
+- hai ray dẫn hướng giữ chai đi đúng một hàng,
+- chai từ outlet của turntable đi vào giữa conveyor.
 
 ## 2. Filling Station
 
@@ -143,6 +161,7 @@ HUD trong game hiển thị:
 - Infeed throughput, bottles/hour.
 - Infeed motor speed, rpm.
 - Turntable buffer và số chai trên conveyor.
+- `omega` và `a_c rim` của turntable.
 - Vessel liquid level, L.
 - Filling time, s.
 - Inspection status.
@@ -191,8 +210,10 @@ Logic turntable buffer:
 ```text
 spawn bottle from above
 drop to turntable
-rotate around table center
-if bufferCount >= releaseThreshold:
+omega = rpm * 2π / 60
+a_c = omega^2 * r
+bottle moves outward to rim barrier
+if bufferCount >= releaseThreshold and bottle reaches outlet sector:
     move one bottle to outlet
     send bottle to conveyor
 ```

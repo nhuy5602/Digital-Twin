@@ -24,6 +24,7 @@ namespace ConveyorTwin
         public bool fillingCompleted;
         public bool inspectionCompleted;
         public bool counted;
+        public Vector2 turntableVelocity;
 
         [Header("Visuals")]
         public Transform liquidVisual;

@@ -134,16 +134,17 @@ namespace ConveyorTwin
 
         private void CreateConveyor(Transform parent, Material beltMaterial, Material metalMaterial)
         {
-            var belt = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            belt.name = "Bottle Conveyor";
-            belt.transform.SetParent(parent);
-            belt.transform.position = new Vector3(0f, 0.42f, 0f);
-            belt.transform.localScale = new Vector3(0.75f, 0.1f, 8.5f);
-            belt.GetComponent<Renderer>().sharedMaterial = beltMaterial;
+            CreateCube(parent, "Slat Chain Conveyor Base", new Vector3(0f, 0.39f, 0f), new Vector3(0.54f, 0.08f, 8.5f), beltMaterial);
 
-            CreateCube(parent, "Left Guide Rail", new Vector3(-0.48f, 0.74f, 0f), new Vector3(0.06f, 0.08f, 8.5f), metalMaterial);
-            CreateCube(parent, "Right Guide Rail", new Vector3(0.48f, 0.74f, 0f), new Vector3(0.06f, 0.08f, 8.5f), metalMaterial);
-            CreateCube(parent, "Conveyor Support", new Vector3(0f, 0.2f, 0f), new Vector3(1.1f, 0.15f, 8.7f), metalMaterial);
+            for (var i = 0; i < 42; i++)
+            {
+                var z = -4.05f + i * 0.2f;
+                CreateCube(parent, "Modular Slat Plate", new Vector3(0f, 0.46f, z), new Vector3(0.48f, 0.035f, 0.16f), metalMaterial);
+            }
+
+            CreateCube(parent, "Left Narrow Guide Rail", new Vector3(-0.31f, 0.74f, 0f), new Vector3(0.04f, 0.1f, 8.5f), metalMaterial);
+            CreateCube(parent, "Right Narrow Guide Rail", new Vector3(0.31f, 0.74f, 0f), new Vector3(0.04f, 0.1f, 8.5f), metalMaterial);
+            CreateCube(parent, "Narrow Conveyor Support", new Vector3(0f, 0.2f, 0f), new Vector3(0.76f, 0.15f, 8.7f), metalMaterial);
         }
 
         private Transform CreateTurntable(Transform parent, Material material)
@@ -235,15 +236,15 @@ namespace ConveyorTwin
 
         private Transform CreateQcSensor(Transform parent, Material sensorMaterial, Material metalMaterial)
         {
-            CreateCube(parent, "QC Sensor Head Left", new Vector3(-0.72f, 0.95f, 0.85f), new Vector3(0.18f, 0.28f, 0.18f), metalMaterial);
-            CreateCube(parent, "QC Sensor Head Right", new Vector3(0.72f, 0.95f, 0.85f), new Vector3(0.18f, 0.28f, 0.18f), metalMaterial);
-            return CreateCube(parent, "QC Sensor Beam", new Vector3(0f, 0.92f, 0.85f), new Vector3(1.3f, 0.035f, 0.035f), sensorMaterial).transform;
+            CreateCube(parent, "QC Sensor Head Left", new Vector3(-0.46f, 0.95f, 0.85f), new Vector3(0.16f, 0.28f, 0.16f), metalMaterial);
+            CreateCube(parent, "QC Sensor Head Right", new Vector3(0.46f, 0.95f, 0.85f), new Vector3(0.16f, 0.28f, 0.16f), metalMaterial);
+            return CreateCube(parent, "QC Sensor Beam", new Vector3(0f, 0.92f, 0.85f), new Vector3(0.86f, 0.035f, 0.035f), sensorMaterial).transform;
         }
 
         private Transform CreatePusher(Transform parent, Material metalMaterial, Material rejectMaterial)
         {
-            CreateCube(parent, "Pneumatic Cylinder Body", new Vector3(0.9f, 0.78f, 2.25f), new Vector3(0.42f, 0.22f, 0.22f), metalMaterial);
-            return CreateCube(parent, "Pneumatic Pusher", new Vector3(0.55f, 0.78f, 2.25f), new Vector3(0.12f, 0.32f, 0.48f), rejectMaterial).transform;
+            CreateCube(parent, "Pneumatic Cylinder Body", new Vector3(0.72f, 0.78f, 2.25f), new Vector3(0.36f, 0.22f, 0.22f), metalMaterial);
+            return CreateCube(parent, "Pneumatic Pusher", new Vector3(0.43f, 0.78f, 2.25f), new Vector3(0.1f, 0.32f, 0.42f), rejectMaterial).transform;
         }
 
         private Transform CreateChute(Transform parent, string name, Vector3 position, Material material, float zRotation)
@@ -263,28 +264,28 @@ namespace ConveyorTwin
             body.name = "Bottle Body";
             body.transform.SetParent(bottleRoot.transform);
             body.transform.localPosition = Vector3.zero;
-            body.transform.localScale = new Vector3(0.18f, 0.42f, 0.18f);
+            body.transform.localScale = new Vector3(0.14f, 0.42f, 0.14f);
             body.GetComponent<Renderer>().sharedMaterial = bottleMaterial;
 
             var neck = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             neck.name = "Bottle Neck";
             neck.transform.SetParent(bottleRoot.transform);
             neck.transform.localPosition = new Vector3(0f, 0.47f, 0f);
-            neck.transform.localScale = new Vector3(0.09f, 0.16f, 0.09f);
+            neck.transform.localScale = new Vector3(0.07f, 0.16f, 0.07f);
             neck.GetComponent<Renderer>().sharedMaterial = bottleMaterial;
 
             var cap = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             cap.name = "Bottle Cap";
             cap.transform.SetParent(bottleRoot.transform);
             cap.transform.localPosition = new Vector3(0f, 0.67f, 0f);
-            cap.transform.localScale = new Vector3(0.08f, 0.05f, 0.08f);
+            cap.transform.localScale = new Vector3(0.065f, 0.05f, 0.065f);
             cap.GetComponent<Renderer>().sharedMaterial = waterMaterial;
 
             var liquid = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             liquid.name = "Bottle Liquid";
             liquid.transform.SetParent(bottleRoot.transform);
             liquid.transform.localPosition = new Vector3(0f, -0.32f, 0f);
-            liquid.transform.localScale = new Vector3(0.14f, 0.02f, 0.14f);
+            liquid.transform.localScale = new Vector3(0.105f, 0.02f, 0.105f);
             liquid.GetComponent<Renderer>().sharedMaterial = waterMaterial;
 
             var state = bottleRoot.AddComponent<BottleProcessState>();

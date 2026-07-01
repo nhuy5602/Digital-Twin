@@ -29,6 +29,7 @@ namespace ConveyorTwin
             DrawLine($"1. Infeed throughput: {process.ThroughputBottlesPerHour:0} bottles/hour");
             DrawLine($"   Infeed motor speed: {process.InfeedMotorSpeedRpm:0.0} rpm");
             DrawLine($"   Turntable buffer: {process.TurntableBufferCount} bottles | Conveyor: {process.BottlesOnConveyorCount}");
+            DrawLine($"   omega: {process.TurntableAngularSpeedRadPerSec:0.00} rad/s | a_c rim: {process.CentrifugalAccelerationAtRimMps2:0.00} m/s2");
             DrawLine($"2. Vessel liquid level: {process.LiquidLevelLiters:0.0} L");
             DrawLine($"   Filling time: {process.LastFillingTimeSeconds:0.00} s");
             DrawLine($"3. Inspection status: {process.InspectionStatus}");

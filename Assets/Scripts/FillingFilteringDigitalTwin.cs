@@ -45,6 +45,10 @@ namespace ConveyorTwin
         public int releaseThreshold = 7;
         public float releaseIntervalSeconds = 0.65f;
         public float outletMoveTimeSeconds = 0.42f;
+        public float turntableSurfaceGrip = 3.5f;
+        public float turntableVelocityDamping = 0.96f;
+        public float outletCaptureRadius = 0.88f;
+        public float outletAngleToleranceDegrees = 28f;
 
         [Header("Process settings")]
         [Range(0f, 1f)] public float properFillProbability = 0.9f;
@@ -64,6 +68,8 @@ namespace ConveyorTwin
         public int TotalRejected { get; private set; }
         public int TurntableBufferCount { get; private set; }
         public int BottlesOnConveyorCount { get; private set; }
+        public float TurntableAngularSpeedRadPerSec { get; private set; }
+        public float CentrifugalAccelerationAtRimMps2 { get; private set; }
 
         private readonly List<BottleProcessState> turntableBottles = new List<BottleProcessState>();
         private readonly HashSet<BottleProcessState> lineBottles = new HashSet<BottleProcessState>();
@@ -76,6 +82,7 @@ namespace ConveyorTwin
         private float releaseTimer;
         private int spawnedCount;
         private bool fillingStationBusy;
+        private bool outletOccupied;
 
         private void Awake()
         {
@@ -119,6 +126,8 @@ namespace ConveyorTwin
         {
             spawnTimer += Time.deltaTime;
             releaseTimer += Time.deltaTime;
+            TurntableAngularSpeedRadPerSec = infeedMotorSpeedRpm * Mathf.PI * 2f / 60f;
+            CentrifugalAccelerationAtRimMps2 = TurntableAngularSpeedRadPerSec * TurntableAngularSpeedRadPerSec * turntableRadius;
 
             if (spawnTimer >= spawnIntervalSeconds && turntableBottles.Count + droppingBottles.Count < maxTurntableBuffer)
             {
@@ -126,13 +135,7 @@ namespace ConveyorTwin
                 SpawnBottleIntoTurntable();
             }
 
-            OrbitBufferedBottles();
-
-            if (releaseTimer >= releaseIntervalSeconds && turntableBottles.Count >= releaseThreshold)
-            {
-                releaseTimer = 0f;
-                ReleaseBottleToOutlet();
-            }
+            UpdateTurntablePhysics();
         }
 
         private void SpawnBottleIntoTurntable()
@@ -156,10 +159,12 @@ namespace ConveyorTwin
             bottle.fillingCompleted = false;
             bottle.inspectionCompleted = false;
             bottle.counted = false;
+            bottle.turntableVelocity = Vector2.zero;
             bottles.Add(bottle);
 
-            var slotAngle = spawnedCount * 137.5f;
-            var target = TurntableSlotPosition(slotAngle, turntableBottles.Count + droppingBottles.Count);
+            var angle = spawnedCount * 137.5f * Mathf.Deg2Rad;
+            var radius = Random.Range(0.05f, turntableRadius * 0.25f);
+            var target = turntableCenter + new Vector3(Mathf.Cos(angle) * radius, 0f, Mathf.Sin(angle) * radius);
             StartCoroutine(DropBottleToTurntable(bottle, target));
         }
 
@@ -178,19 +183,19 @@ namespace ConveyorTwin
 
             bottle.transform.position = target;
             bottle.status = BottleQualityStatus.InTurntableBuffer;
+            bottle.turntableVelocity = Random.insideUnitCircle * 0.05f;
             droppingBottles.Remove(bottle);
             turntableBottles.Add(bottle);
         }
 
-        private void OrbitBufferedBottles()
+        private void UpdateTurntablePhysics()
         {
             if (turntableBottles.Count == 0)
             {
                 return;
             }
 
-            var rotationDegrees = infeedMotorSpeedRpm * 6f * Time.time;
-            for (var i = 0; i < turntableBottles.Count; i++)
+            for (var i = turntableBottles.Count - 1; i >= 0; i--)
             {
                 var bottle = turntableBottles[i];
                 if (bottle == null)
@@ -198,36 +203,77 @@ namespace ConveyorTwin
                     continue;
                 }
 
-                bottle.transform.position = TurntableSlotPosition(rotationDegrees + i * 360f / turntableBottles.Count, i);
-            }
-        }
-
-        private Vector3 TurntableSlotPosition(float angleDegrees, int index)
-        {
-            var ring = index % 3;
-            var radius = turntableRadius * (0.42f + ring * 0.24f);
-            var angle = angleDegrees * Mathf.Deg2Rad;
-            return turntableCenter + new Vector3(Mathf.Cos(angle) * radius, 0f, Mathf.Sin(angle) * radius);
-        }
-
-        private void ReleaseBottleToOutlet()
-        {
-            for (var i = 0; i < turntableBottles.Count; i++)
-            {
-                var bottle = turntableBottles[i];
-                if (bottle == null || outletBottles.Contains(bottle))
+                if (outletBottles.Contains(bottle))
                 {
                     continue;
                 }
 
-                turntableBottles.RemoveAt(i);
-                StartCoroutine(MoveBottleToOutlet(bottle));
-                return;
+                var position = bottle.transform.position;
+                var radial = new Vector2(position.x - turntableCenter.x, position.z - turntableCenter.z);
+                if (radial.sqrMagnitude < 0.0001f)
+                {
+                    radial = Random.insideUnitCircle.normalized * 0.02f;
+                }
+
+                var radius = radial.magnitude;
+                var radialDirection = radial / Mathf.Max(radius, 0.0001f);
+                var tangentDirection = new Vector2(-radialDirection.y, radialDirection.x);
+                var tableSurfaceVelocity = tangentDirection * TurntableAngularSpeedRadPerSec * radius;
+
+                // Centrifugal term: a = omega^2 * r, plus surface grip that drags bottles with the rotating table.
+                var centrifugalAcceleration = radialDirection * TurntableAngularSpeedRadPerSec * TurntableAngularSpeedRadPerSec * radius;
+                var gripAcceleration = (tableSurfaceVelocity - bottle.turntableVelocity) * turntableSurfaceGrip;
+                bottle.turntableVelocity += (centrifugalAcceleration + gripAcceleration) * Time.deltaTime;
+                bottle.turntableVelocity *= Mathf.Pow(turntableVelocityDamping, Time.deltaTime * 60f);
+
+                radial += bottle.turntableVelocity * Time.deltaTime;
+                radius = radial.magnitude;
+
+                if (radius > turntableRadius)
+                {
+                    radial = radial.normalized * turntableRadius;
+                    var outwardSpeed = Vector2.Dot(bottle.turntableVelocity, radial.normalized);
+                    if (outwardSpeed > 0f)
+                    {
+                        bottle.turntableVelocity -= radial.normalized * outwardSpeed;
+                    }
+                }
+
+                bottle.transform.position = new Vector3(turntableCenter.x + radial.x, turntableCenter.y, turntableCenter.z + radial.y);
+
+                if (CanReleaseThroughOutlet(bottle))
+                {
+                    turntableBottles.RemoveAt(i);
+                    releaseTimer = 0f;
+                    StartCoroutine(MoveBottleToOutlet(bottle));
+                }
             }
+        }
+
+        private bool CanReleaseThroughOutlet(BottleProcessState bottle)
+        {
+            if (outletOccupied || releaseTimer < releaseIntervalSeconds || turntableBottles.Count < releaseThreshold)
+            {
+                return false;
+            }
+
+            var outletPosition = turntableOutlet != null ? turntableOutlet.position : new Vector3(lineX, turntableCenter.y, infeedStartZ);
+            var bottleVector = bottle.transform.position - turntableCenter;
+            var outletVector = outletPosition - turntableCenter;
+            bottleVector.y = 0f;
+            outletVector.y = 0f;
+
+            if (bottleVector.magnitude < outletCaptureRadius)
+            {
+                return false;
+            }
+
+            return Vector3.Angle(bottleVector, outletVector) <= outletAngleToleranceDegrees;
         }
 
         private IEnumerator MoveBottleToOutlet(BottleProcessState bottle)
         {
+            outletOccupied = true;
             outletBottles.Add(bottle);
             bottle.status = BottleQualityStatus.MovingToOutlet;
 
@@ -248,6 +294,7 @@ namespace ConveyorTwin
             bottle.status = BottleQualityStatus.Empty;
             outletBottles.Remove(bottle);
             lineBottles.Add(bottle);
+            outletOccupied = false;
         }
 
         private void MoveBottles()
@@ -403,6 +450,7 @@ namespace ConveyorTwin
             }
 
             bottle.counted = true;
+            lineBottles.Remove(bottle);
             completedCount++;
 
             if (passed)
