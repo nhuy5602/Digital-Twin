@@ -5,6 +5,9 @@ namespace ConveyorTwin
     public enum BottleQualityStatus
     {
         Empty,
+        DroppingToTurntable,
+        InTurntableBuffer,
+        MovingToOutlet,
         Filling,
         Filled,
         Passed,

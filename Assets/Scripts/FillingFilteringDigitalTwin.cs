@@ -14,6 +14,8 @@ namespace ConveyorTwin
     {
         [Header("Stations")]
         public Transform infeedTurntable;
+        public Transform bottleSpawnPoint;
+        public Transform turntableOutlet;
         public Transform fillingNozzle;
         public Transform liquidVessel;
         public Transform vesselLiquidVisual;
@@ -23,6 +25,7 @@ namespace ConveyorTwin
         public Transform rejectChute;
 
         [Header("Bottle line")]
+        public BottleProcessState bottleTemplate;
         public List<BottleProcessState> bottles = new List<BottleProcessState>();
         public float conveyorSpeedMps = 0.85f;
         public float infeedStartZ = -4.2f;
@@ -31,6 +34,17 @@ namespace ConveyorTwin
         public float pusherZ = 2.25f;
         public float acceptEndZ = 4.1f;
         public float lineX = 0f;
+
+        [Header("Turntable buffer")]
+        public Vector3 turntableCenter = new Vector3(0f, 0.82f, -4.7f);
+        public float turntableRadius = 0.95f;
+        public float bottleDropHeight = 2.6f;
+        public float bottleDropTimeSeconds = 0.45f;
+        public float spawnIntervalSeconds = 0.45f;
+        public int maxTurntableBuffer = 16;
+        public int releaseThreshold = 7;
+        public float releaseIntervalSeconds = 0.65f;
+        public float outletMoveTimeSeconds = 0.42f;
 
         [Header("Process settings")]
         [Range(0f, 1f)] public float properFillProbability = 0.9f;
@@ -48,10 +62,20 @@ namespace ConveyorTwin
         public InspectionStatus InspectionStatus { get; private set; } = InspectionStatus.Normal;
         public int TotalPassed { get; private set; }
         public int TotalRejected { get; private set; }
+        public int TurntableBufferCount { get; private set; }
+        public int BottlesOnConveyorCount { get; private set; }
 
+        private readonly List<BottleProcessState> turntableBottles = new List<BottleProcessState>();
+        private readonly HashSet<BottleProcessState> lineBottles = new HashSet<BottleProcessState>();
         private readonly HashSet<BottleProcessState> fillingBottles = new HashSet<BottleProcessState>();
         private readonly HashSet<BottleProcessState> pushingBottles = new HashSet<BottleProcessState>();
+        private readonly HashSet<BottleProcessState> droppingBottles = new HashSet<BottleProcessState>();
+        private readonly HashSet<BottleProcessState> outletBottles = new HashSet<BottleProcessState>();
         private int completedCount;
+        private float spawnTimer;
+        private float releaseTimer;
+        private int spawnedCount;
+        private bool fillingStationBusy;
 
         private void Awake()
         {
@@ -68,9 +92,12 @@ namespace ConveyorTwin
         private void Update()
         {
             AnimateMachines();
+            UpdateTurntableBuffer();
             UpdateVesselVisual();
             MoveBottles();
             ThroughputBottlesPerHour = completedCount / Mathf.Max(Time.time / 3600f, 0.0001f);
+            TurntableBufferCount = turntableBottles.Count;
+            BottlesOnConveyorCount = lineBottles.Count;
         }
 
         private void AnimateMachines()
@@ -88,17 +115,151 @@ namespace ConveyorTwin
             }
         }
 
+        private void UpdateTurntableBuffer()
+        {
+            spawnTimer += Time.deltaTime;
+            releaseTimer += Time.deltaTime;
+
+            if (spawnTimer >= spawnIntervalSeconds && turntableBottles.Count + droppingBottles.Count < maxTurntableBuffer)
+            {
+                spawnTimer = 0f;
+                SpawnBottleIntoTurntable();
+            }
+
+            OrbitBufferedBottles();
+
+            if (releaseTimer >= releaseIntervalSeconds && turntableBottles.Count >= releaseThreshold)
+            {
+                releaseTimer = 0f;
+                ReleaseBottleToOutlet();
+            }
+        }
+
+        private void SpawnBottleIntoTurntable()
+        {
+            if (bottleTemplate == null)
+            {
+                return;
+            }
+
+            spawnedCount++;
+            var spawnPosition = bottleSpawnPoint != null
+                ? bottleSpawnPoint.position
+                : turntableCenter + Vector3.up * bottleDropHeight;
+
+            var bottle = Instantiate(bottleTemplate, spawnPosition, Quaternion.identity, transform);
+            bottle.name = $"Bottle {spawnedCount:00}";
+            bottle.gameObject.SetActive(true);
+            bottle.status = BottleQualityStatus.DroppingToTurntable;
+            bottle.SetVolume(0f);
+            bottle.isDefective = false;
+            bottle.fillingCompleted = false;
+            bottle.inspectionCompleted = false;
+            bottle.counted = false;
+            bottles.Add(bottle);
+
+            var slotAngle = spawnedCount * 137.5f;
+            var target = TurntableSlotPosition(slotAngle, turntableBottles.Count + droppingBottles.Count);
+            StartCoroutine(DropBottleToTurntable(bottle, target));
+        }
+
+        private IEnumerator DropBottleToTurntable(BottleProcessState bottle, Vector3 target)
+        {
+            droppingBottles.Add(bottle);
+            var start = bottle.transform.position;
+            var elapsed = 0f;
+
+            while (elapsed < bottleDropTimeSeconds)
+            {
+                elapsed += Time.deltaTime;
+                bottle.transform.position = Vector3.Lerp(start, target, elapsed / bottleDropTimeSeconds);
+                yield return null;
+            }
+
+            bottle.transform.position = target;
+            bottle.status = BottleQualityStatus.InTurntableBuffer;
+            droppingBottles.Remove(bottle);
+            turntableBottles.Add(bottle);
+        }
+
+        private void OrbitBufferedBottles()
+        {
+            if (turntableBottles.Count == 0)
+            {
+                return;
+            }
+
+            var rotationDegrees = infeedMotorSpeedRpm * 6f * Time.time;
+            for (var i = 0; i < turntableBottles.Count; i++)
+            {
+                var bottle = turntableBottles[i];
+                if (bottle == null)
+                {
+                    continue;
+                }
+
+                bottle.transform.position = TurntableSlotPosition(rotationDegrees + i * 360f / turntableBottles.Count, i);
+            }
+        }
+
+        private Vector3 TurntableSlotPosition(float angleDegrees, int index)
+        {
+            var ring = index % 3;
+            var radius = turntableRadius * (0.42f + ring * 0.24f);
+            var angle = angleDegrees * Mathf.Deg2Rad;
+            return turntableCenter + new Vector3(Mathf.Cos(angle) * radius, 0f, Mathf.Sin(angle) * radius);
+        }
+
+        private void ReleaseBottleToOutlet()
+        {
+            for (var i = 0; i < turntableBottles.Count; i++)
+            {
+                var bottle = turntableBottles[i];
+                if (bottle == null || outletBottles.Contains(bottle))
+                {
+                    continue;
+                }
+
+                turntableBottles.RemoveAt(i);
+                StartCoroutine(MoveBottleToOutlet(bottle));
+                return;
+            }
+        }
+
+        private IEnumerator MoveBottleToOutlet(BottleProcessState bottle)
+        {
+            outletBottles.Add(bottle);
+            bottle.status = BottleQualityStatus.MovingToOutlet;
+
+            var start = bottle.transform.position;
+            var outlet = turntableOutlet != null
+                ? turntableOutlet.position
+                : new Vector3(lineX, turntableCenter.y, infeedStartZ);
+            var elapsed = 0f;
+
+            while (elapsed < outletMoveTimeSeconds)
+            {
+                elapsed += Time.deltaTime;
+                bottle.transform.position = Vector3.Lerp(start, outlet, elapsed / outletMoveTimeSeconds);
+                yield return null;
+            }
+
+            bottle.transform.position = new Vector3(lineX, outlet.y, infeedStartZ);
+            bottle.status = BottleQualityStatus.Empty;
+            outletBottles.Remove(bottle);
+            lineBottles.Add(bottle);
+        }
+
         private void MoveBottles()
         {
             foreach (var bottle in bottles)
             {
-                if (bottle == null || fillingBottles.Contains(bottle) || pushingBottles.Contains(bottle))
+                if (bottle == null || !lineBottles.Contains(bottle) || fillingBottles.Contains(bottle) || pushingBottles.Contains(bottle))
                 {
                     continue;
                 }
 
                 var position = bottle.transform.position;
-                position.x = lineX;
 
                 if (bottle.status == BottleQualityStatus.AcceptedBin)
                 {
@@ -114,9 +275,20 @@ namespace ConveyorTwin
                     continue;
                 }
 
+                position.x = lineX;
+
                 if (!bottle.fillingCompleted && position.z >= fillingZ)
                 {
-                    StartCoroutine(FillBottle(bottle));
+                    if (fillingStationBusy)
+                    {
+                        position.z = fillingZ - 0.45f;
+                        bottle.transform.position = position;
+                    }
+                    else
+                    {
+                        StartCoroutine(FillBottle(bottle));
+                    }
+
                     continue;
                 }
 
@@ -146,6 +318,7 @@ namespace ConveyorTwin
 
         private IEnumerator FillBottle(BottleProcessState bottle)
         {
+            fillingStationBusy = true;
             fillingBottles.Add(bottle);
             bottle.status = BottleQualityStatus.Filling;
             bottle.transform.position = new Vector3(lineX, bottle.transform.position.y, fillingZ);
@@ -168,6 +341,7 @@ namespace ConveyorTwin
             LastFillingTimeSeconds = fillingTimeSeconds;
             LiquidLevelLiters = Mathf.Max(0f, LiquidLevelLiters - targetVolume * bottleCapacityLiters);
             fillingBottles.Remove(bottle);
+            fillingStationBusy = false;
         }
 
         private void InspectBottle(BottleProcessState bottle)

@@ -28,6 +28,7 @@ namespace ConveyorTwin
             GUILayout.BeginArea(new Rect(position.x + 16f, position.y + 28f, size.x - 32f, size.y - 40f));
             DrawLine($"1. Infeed throughput: {process.ThroughputBottlesPerHour:0} bottles/hour");
             DrawLine($"   Infeed motor speed: {process.InfeedMotorSpeedRpm:0.0} rpm");
+            DrawLine($"   Turntable buffer: {process.TurntableBufferCount} bottles | Conveyor: {process.BottlesOnConveyorCount}");
             DrawLine($"2. Vessel liquid level: {process.LiquidLevelLiters:0.0} L");
             DrawLine($"   Filling time: {process.LastFillingTimeSeconds:0.00} s");
             DrawLine($"3. Inspection status: {process.InspectionStatus}");

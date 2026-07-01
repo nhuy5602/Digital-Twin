@@ -52,14 +52,17 @@ Infeed Turntable
 
 Logic vận hành:
 
-- Mâm quay chứa chai rỗng.
-- Mâm quay xoay liên tục để mô phỏng cấp chai vào băng chuyền.
-- Chai rỗng lần lượt đi vào line chính.
+- Chai rỗng được sinh ra từ `Bottle Spawn Point` phía trên mâm.
+- Chai rơi xuống `Infeed Turntable`.
+- Mâm quay tự xoay tại chỗ như một buffer/caching table.
+- Khi số chai trong buffer đạt `releaseThreshold`, hệ thống tự xả từng chai qua `Turntable Outlet`.
+- Chai sau đó đi vào conveyor chính để đến trạm filling.
 
 Digital Twin Data:
 
 - `Throughput`: năng suất chai/giờ.
 - `Infeed Motor Speed`: tốc độ mô-tơ cấp liệu, đơn vị rpm.
+- `Turntable Buffer`: số chai đang nằm trên mâm chờ ra outlet.
 
 ## 2. Filling Station
 
@@ -139,6 +142,7 @@ HUD trong game hiển thị:
 
 - Infeed throughput, bottles/hour.
 - Infeed motor speed, rpm.
+- Turntable buffer và số chai trên conveyor.
 - Vessel liquid level, L.
 - Filling time, s.
 - Inspection status.
@@ -182,6 +186,17 @@ Logic xác suất lỗi:
 10% => volume = random(0.5, 0.6)
 ```
 
+Logic turntable buffer:
+
+```text
+spawn bottle from above
+drop to turntable
+rotate around table center
+if bufferCount >= releaseThreshold:
+    move one bottle to outlet
+    send bottle to conveyor
+```
+
 ## File quan trọng
 
 - `FillingFilteringDigitalTwin.cs`: điều phối toàn bộ quy trình.
@@ -189,4 +204,3 @@ Logic xác suất lỗi:
 - `FillingFilteringHud.cs`: dashboard digital twin.
 - `ConveyorDemoRuntimeBootstrap.cs`: tự dựng scene demo khi mở/chạy scene.
 - `ConveyorDemoSceneBuilder.cs`: menu editor để dựng lại scene.
-

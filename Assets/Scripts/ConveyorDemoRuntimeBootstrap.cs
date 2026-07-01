@@ -38,18 +38,22 @@ namespace ConveyorTwin
             CreateFloor(root.transform, floorMaterial);
             CreateConveyor(root.transform, beltMaterial, metalMaterial);
             var turntable = CreateTurntable(root.transform, metalMaterial);
+            var bottleSpawnPoint = CreateBottleDropper(root.transform, metalMaterial);
+            var turntableOutlet = CreateTurntableOutlet(root.transform, metalMaterial);
             var vesselParts = CreateLiquidVessel(root.transform, metalMaterial, waterMaterial);
             var nozzle = CreateFillingNozzle(root.transform, metalMaterial, waterMaterial);
             var qcBeam = CreateQcSensor(root.transform, sensorMaterial, metalMaterial);
             var pusher = CreatePusher(root.transform, metalMaterial, rejectMaterial);
             var acceptChute = CreateChute(root.transform, "Accept Chute", new Vector3(0.95f, 0.28f, 4.4f), acceptMaterial, 18f);
             var rejectChute = CreateChute(root.transform, "Reject Chute", new Vector3(-1.15f, 0.35f, 2.45f), rejectMaterial, -25f);
-            var bottles = CreateBottles(root.transform, bottleMaterial, waterMaterial);
+            var bottleTemplate = CreateBottleTemplate(root.transform, bottleMaterial, waterMaterial);
 
             var processObject = new GameObject("Filling Filtering Process Controller");
             processObject.transform.SetParent(root.transform);
             var process = processObject.AddComponent<FillingFilteringDigitalTwin>();
             process.infeedTurntable = turntable;
+            process.bottleSpawnPoint = bottleSpawnPoint;
+            process.turntableOutlet = turntableOutlet;
             process.fillingNozzle = nozzle;
             process.liquidVessel = vesselParts.vessel;
             process.vesselLiquidVisual = vesselParts.liquid;
@@ -57,12 +61,18 @@ namespace ConveyorTwin
             process.pneumaticPusher = pusher;
             process.acceptChute = acceptChute;
             process.rejectChute = rejectChute;
-            process.bottles = bottles;
+            process.bottleTemplate = bottleTemplate;
             process.conveyorSpeedMps = 0.85f;
             process.infeedMotorSpeedRpm = 18f;
             process.fillingTimeSeconds = 1.35f;
             process.properFillProbability = 0.9f;
             process.passThreshold = 0.95f;
+            process.turntableCenter = new Vector3(0f, 0.82f, -4.7f);
+            process.turntableRadius = 0.95f;
+            process.releaseThreshold = 7;
+            process.maxTurntableBuffer = 16;
+            process.spawnIntervalSeconds = 0.42f;
+            process.releaseIntervalSeconds = 0.62f;
 
             CreateHud(root.transform, process);
             ConfigureCameraAndLight();
@@ -144,7 +154,43 @@ namespace ConveyorTwin
             table.transform.position = new Vector3(0f, 0.48f, -4.7f);
             table.transform.localScale = new Vector3(1.35f, 0.08f, 1.35f);
             table.GetComponent<Renderer>().sharedMaterial = material;
+
+            for (var i = 0; i < 20; i++)
+            {
+                var angle = i * Mathf.PI * 2f / 20f;
+                var rim = CreateCube(
+                    parent,
+                    "Turntable Safety Rim",
+                    new Vector3(Mathf.Cos(angle) * 1.38f, 0.78f, -4.7f + Mathf.Sin(angle) * 1.38f),
+                    new Vector3(0.16f, 0.34f, 0.08f),
+                    material);
+                rim.transform.rotation = Quaternion.Euler(0f, -angle * Mathf.Rad2Deg, 0f);
+            }
+
+            CreateCube(parent, "Turntable Outlet Gate", new Vector3(0f, 0.78f, -3.45f), new Vector3(0.55f, 0.26f, 0.08f), material);
             return table.transform;
+        }
+
+        private Transform CreateBottleDropper(Transform parent, Material material)
+        {
+            CreateCube(parent, "Bottle Dropper Stand", new Vector3(-1.25f, 1.45f, -4.7f), new Vector3(0.08f, 1.7f, 0.08f), material);
+            CreateCube(parent, "Bottle Dropper Arm", new Vector3(-0.62f, 2.25f, -4.7f), new Vector3(1.25f, 0.08f, 0.08f), material);
+
+            var spawn = new GameObject("Bottle Spawn Point");
+            spawn.transform.SetParent(parent);
+            spawn.transform.position = new Vector3(0f, 2.45f, -4.7f);
+            return spawn.transform;
+        }
+
+        private Transform CreateTurntableOutlet(Transform parent, Material material)
+        {
+            CreateCube(parent, "Turntable Outlet Guide Left", new Vector3(-0.32f, 0.72f, -3.7f), new Vector3(0.06f, 0.18f, 0.9f), material);
+            CreateCube(parent, "Turntable Outlet Guide Right", new Vector3(0.32f, 0.72f, -3.7f), new Vector3(0.06f, 0.18f, 0.9f), material);
+
+            var outlet = new GameObject("Turntable Outlet");
+            outlet.transform.SetParent(parent);
+            outlet.transform.position = new Vector3(0f, 0.82f, -4.15f);
+            return outlet.transform;
         }
 
         private (Transform vessel, Transform liquid) CreateLiquidVessel(Transform parent, Material metalMaterial, Material waterMaterial)
@@ -207,45 +253,47 @@ namespace ConveyorTwin
             return chute.transform;
         }
 
-        private List<BottleProcessState> CreateBottles(Transform parent, Material bottleMaterial, Material waterMaterial)
+        private BottleProcessState CreateBottleTemplate(Transform parent, Material bottleMaterial, Material waterMaterial)
         {
-            var bottles = new List<BottleProcessState>();
-            for (var i = 0; i < 10; i++)
-            {
-                var bottleRoot = new GameObject($"Bottle {i + 1:00}");
-                bottleRoot.transform.SetParent(parent);
-                bottleRoot.transform.position = new Vector3(0f, 0.82f, -4.25f - i * 0.55f);
+            var bottleRoot = new GameObject("Bottle Template");
+            bottleRoot.transform.SetParent(parent);
+            bottleRoot.transform.position = new Vector3(0f, 0.82f, -4.7f);
 
-                var body = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-                body.name = "Bottle Body";
-                body.transform.SetParent(bottleRoot.transform);
-                body.transform.localPosition = Vector3.zero;
-                body.transform.localScale = new Vector3(0.18f, 0.42f, 0.18f);
-                body.GetComponent<Renderer>().sharedMaterial = bottleMaterial;
+            var body = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            body.name = "Bottle Body";
+            body.transform.SetParent(bottleRoot.transform);
+            body.transform.localPosition = Vector3.zero;
+            body.transform.localScale = new Vector3(0.18f, 0.42f, 0.18f);
+            body.GetComponent<Renderer>().sharedMaterial = bottleMaterial;
 
-                var neck = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-                neck.name = "Bottle Neck";
-                neck.transform.SetParent(bottleRoot.transform);
-                neck.transform.localPosition = new Vector3(0f, 0.47f, 0f);
-                neck.transform.localScale = new Vector3(0.09f, 0.16f, 0.09f);
-                neck.GetComponent<Renderer>().sharedMaterial = bottleMaterial;
+            var neck = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            neck.name = "Bottle Neck";
+            neck.transform.SetParent(bottleRoot.transform);
+            neck.transform.localPosition = new Vector3(0f, 0.47f, 0f);
+            neck.transform.localScale = new Vector3(0.09f, 0.16f, 0.09f);
+            neck.GetComponent<Renderer>().sharedMaterial = bottleMaterial;
 
-                var liquid = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-                liquid.name = "Bottle Liquid";
-                liquid.transform.SetParent(bottleRoot.transform);
-                liquid.transform.localPosition = new Vector3(0f, -0.32f, 0f);
-                liquid.transform.localScale = new Vector3(0.14f, 0.02f, 0.14f);
-                liquid.GetComponent<Renderer>().sharedMaterial = waterMaterial;
+            var cap = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            cap.name = "Bottle Cap";
+            cap.transform.SetParent(bottleRoot.transform);
+            cap.transform.localPosition = new Vector3(0f, 0.67f, 0f);
+            cap.transform.localScale = new Vector3(0.08f, 0.05f, 0.08f);
+            cap.GetComponent<Renderer>().sharedMaterial = waterMaterial;
 
-                var state = bottleRoot.AddComponent<BottleProcessState>();
-                state.bottleRenderer = body.GetComponent<Renderer>();
-                state.liquidRenderer = liquid.GetComponent<Renderer>();
-                state.liquidVisual = liquid.transform;
-                state.SetVolume(0f);
-                bottles.Add(state);
-            }
+            var liquid = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            liquid.name = "Bottle Liquid";
+            liquid.transform.SetParent(bottleRoot.transform);
+            liquid.transform.localPosition = new Vector3(0f, -0.32f, 0f);
+            liquid.transform.localScale = new Vector3(0.14f, 0.02f, 0.14f);
+            liquid.GetComponent<Renderer>().sharedMaterial = waterMaterial;
 
-            return bottles;
+            var state = bottleRoot.AddComponent<BottleProcessState>();
+            state.bottleRenderer = body.GetComponent<Renderer>();
+            state.liquidRenderer = liquid.GetComponent<Renderer>();
+            state.liquidVisual = liquid.transform;
+            state.SetVolume(0f);
+            bottleRoot.SetActive(false);
+            return state;
         }
 
         private void CreateHud(Transform parent, FillingFilteringDigitalTwin process)

@@ -24,6 +24,8 @@ Thiết bị: `Infeed Turntable`.
 
 Mâm quay mô phỏng việc cấp chai rỗng vào băng chuyền theo thứ tự. Dữ liệu theo dõi gồm throughput và tốc độ mô-tơ cấp liệu.
 
+Trong bản mô phỏng mới, chai được sinh ra từ phía trên mâm và rơi xuống turntable. Turntable đóng vai trò buffer/caching table: chai nằm trên mâm sẽ xoay quanh tâm mâm, khi số lượng chai trong buffer đạt ngưỡng thì hệ thống xả từng chai ra outlet để đi vào conveyor chính.
+
 ### Filling Station
 
 Thiết bị: `Filling Nozzle` và `Liquid Vessel`.
@@ -85,3 +87,18 @@ P(underfilled) = 0.1
 - `ConveyorDemoRuntimeBootstrap.cs`: tự dựng mô hình trực quan trong scene.
 - `ConveyorDemoSceneBuilder.cs`: menu editor để dựng lại scene.
 
+## 6. Logic turntable buffer
+
+```text
+spawn bottle from above
+drop bottle into turntable
+rotate bottle around table center
+if bufferCount >= releaseThreshold:
+    release one bottle through outlet
+    transfer bottle to conveyor
+```
+
+Dữ liệu hiển thị thêm trên HUD:
+
+- số chai trong turntable buffer,
+- số chai đang ở conveyor/line xử lý.
