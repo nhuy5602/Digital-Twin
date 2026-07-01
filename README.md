@@ -109,9 +109,10 @@ Logic vận hành:
 
 - Dây chuyền có 4 vòi rót đặt theo cụm `Filling Nozzle 1..4`.
 - Turntable ở đầu line vẫn là buffer/caching table; sau đó chai đi qua outlet sang conveyor hẹp.
-- Conveyor đưa chai vào một `Rotary Processing Cell` giống video tham chiếu: đĩa `Filling Star Wheel` trắng lớn nằm dưới cụm rót, QC, reject và capping.
-- `Filling Star Wheel` có biên dạng scallop/pocket lõm quanh viền, trong Hierarchy gồm `Scalloped Star Wheel Disc`, `Filling Indexed Pocket 1..4` và `Capping Indexed Pocket 1..4`.
-- 4 filling pocket nằm ngay dưới 4 vòi rót để mô phỏng cơ cấu giữ cổ/thân chai theo kiểu star-wheel thật.
+- Bottle vẫn đi thẳng trên conveyor; không đi theo cung tròn của star-wheel.
+- `Filling Star Wheel` được đặt nhỏ hơn ở bên cạnh conveyor, chỉ làm cơ cấu chia bước/index và giữ chai tại trạm rót.
+- Cụm vòi rót vẫn xếp thẳng hàng theo hướng conveyor, vì đường đi của bottle là đường thẳng.
+- Trong Hierarchy, cụm này gồm `Scalloped Star Wheel Disc` và `Filling Indexed Pocket 1..4`.
 - Bánh sao không quay liên tục; nó index từng nấc:
 
 ```text
@@ -119,7 +120,7 @@ stepAngle = 360 / starWheelPocketCount
 pocketPitch = 2 * pi * starWheelPocketRadius / starWheelPocketCount
 ```
 
-- Với `starWheelPocketCount = 18`, mỗi nhịp bánh sao quay `20°`; sau mỗi nhịp index, bottle trong pocket mới được rót.
+- Với `starWheelPocketCount = 14`, mỗi nhịp bánh sao quay khoảng `25.7°`; khoảng cách giữa các chai ở filling dùng `pocketPitch`.
 - `Filling Stop Gate` chặn các chai phía sau chưa đến lượt fill.
 - Khi đủ 4 chai vào vị trí, conveyor dừng toàn bộ.
 - Star Wheel dừng và khóa chai ở đúng vị trí dưới vòi.
@@ -156,8 +157,8 @@ Logic vận hành:
 
 - Chỉ chai `PASSED` mới đi tới trạm đóng nắp.
 - Chai `REJECTED` bị piston đẩy xuống reject chute trước khi tới capping.
-- 4 chai đạt chuẩn được index vào 4 pocket theo góc `cappingStartAngleDegrees + slotIndex * stepAngle`.
-- Các vị trí capping nằm cùng đĩa `Filling Star Wheel`, trong quarter sau của bánh sao, dùng góc `20° -> 80°`.
+- Capping không nằm trong star-wheel nữa; nó nằm sau QC và reject station.
+- 4 chai đạt chuẩn được giữ trên cụm đóng nắp thẳng hàng sau khi đã kiểm tra thể tích chất lỏng.
 - Khi đủ 4 chai, conveyor dừng, 4 `Capping Head` cùng hạ xuống để đóng nắp.
 - Trong lúc đóng nắp, các chai được khóa vị trí giống cơ cấu stop/index nên không bị trôi hoặc đâm vào nhau.
 - Sau khi đóng nắp, nắp chai được bật hiển thị, chai chuyển trạng thái `CAPPED` và đi tiếp tới `Accept Chute`.

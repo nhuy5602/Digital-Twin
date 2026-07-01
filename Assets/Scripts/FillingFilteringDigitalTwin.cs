@@ -43,17 +43,18 @@ namespace ConveyorTwin
 
         [Header("Filling indexing")]
         public int fillingNozzleCount = 4;
+        public float fillingFirstZ = -1.2f;
         public float fillingQueueStopZ = -2.45f;
         public float fillingSlotToleranceM = 0.03f;
         public int starWheelPocketCount = 8;
-        public Vector3 starWheelCenter = new Vector3(1.18f, 0.82f, 0.55f);
-        public float starWheelPocketRadius = 1.18f;
+        public Vector3 starWheelCenter = new Vector3(0.78f, 0.82f, -0.68f);
+        public float starWheelPocketRadius = 0.78f;
         public float starWheelIndexDurationSeconds = 0.32f;
-        public float fillingStartAngleDegrees = 210f;
-        public float cappingStartAngleDegrees = 20f;
 
         [Header("Capping indexing")]
         public int cappingHeadCount = 4;
+        public float cappingFirstZ = 1.65f;
+        public float cappingPitchM = 0.42f;
         public float cappingQueueStopZ = 2.75f;
         public float cappingSlotToleranceM = 0.03f;
         public float cappingTimeSeconds = 0.75f;
@@ -159,7 +160,7 @@ namespace ConveyorTwin
             BottlesAtCappingStation = cappingSlotAssignments.Count;
             ConveyorStoppedForFilling = fillingStationBusy;
             ConveyorStoppedForCapping = cappingStationBusy;
-            StarWheelLocked = fillingStationBusy || cappingStationBusy || StarWheelIndexing;
+            StarWheelLocked = fillingStationBusy || StarWheelIndexing;
             CappingActive = cappingStationBusy;
         }
 
@@ -708,31 +709,12 @@ namespace ConveyorTwin
 
         private Vector3 FillingSlotPosition(int slotIndex)
         {
-            return StarWheelPocketPosition(FillingSlotAngle(slotIndex));
+            return new Vector3(lineX, starWheelCenter.y, fillingFirstZ + slotIndex * StarWheelPocketPitchM);
         }
 
         private Vector3 CappingSlotPosition(int slotIndex)
         {
-            return StarWheelPocketPosition(CappingSlotAngle(slotIndex));
-        }
-
-        private float FillingSlotAngle(int slotIndex)
-        {
-            return fillingStartAngleDegrees - slotIndex * StarWheelStepAngleDegrees;
-        }
-
-        private float CappingSlotAngle(int slotIndex)
-        {
-            return cappingStartAngleDegrees + slotIndex * StarWheelStepAngleDegrees;
-        }
-
-        private Vector3 StarWheelPocketPosition(float angleDegrees)
-        {
-            var angle = angleDegrees * Mathf.Deg2Rad;
-            return new Vector3(
-                starWheelCenter.x + Mathf.Cos(angle) * starWheelPocketRadius,
-                starWheelCenter.y,
-                starWheelCenter.z + Mathf.Sin(angle) * starWheelPocketRadius);
+            return new Vector3(lineX, starWheelCenter.y, cappingFirstZ + slotIndex * cappingPitchM);
         }
 
         private IEnumerator IndexStarWheelOnePitch(List<BottleProcessState> lockedBottles, System.Action<BottleProcessState> snapAction)
@@ -812,8 +794,6 @@ namespace ConveyorTwin
                 cappingBottles.Add(bottle);
                 SnapBottleToCappingSlot(bottle);
             }
-
-            yield return IndexStarWheelOnePitch(batch, SnapBottleToCappingSlot);
 
             var activeHeads = GetActiveCappingHeads();
             var basePositions = new Vector3[activeHeads.Count];
