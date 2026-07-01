@@ -109,10 +109,11 @@ Logic vận hành:
 
 - Dây chuyền có 4 vòi rót đặt theo cụm `Filling Nozzle 1..4`.
 - Turntable ở đầu line vẫn là buffer/caching table; sau đó chai đi qua outlet sang conveyor hẹp.
-- Bottle vẫn đi thẳng trên conveyor; không đi theo cung tròn của star-wheel.
-- `Filling Star Wheel` được đặt nhỏ hơn ở bên cạnh conveyor, chỉ làm cơ cấu chia bước/index và giữ chai tại trạm rót.
-- Cụm vòi rót vẫn xếp thẳng hàng theo hướng conveyor, vì đường đi của bottle là đường thẳng.
-- Trong Hierarchy, cụm này gồm `Scalloped Star Wheel Disc` và `Filling Indexed Pocket 1..4`.
+- Bottle đi thẳng trên conveyor trước khi vào star-wheel.
+- Khi tới `Filling Star Wheel`, bottle được bắt vào các pocket và đi theo cung tròn của star-wheel.
+- Hết vùng star-wheel, bottle được trả về đường conveyor thẳng để đi qua QC, reject và capping.
+- Vì bottle đi cong trong star-wheel, 4 vòi rót cũng được đặt theo cung pocket thay vì xếp thẳng.
+- Trong Hierarchy, cụm này gồm `Scalloped Star Wheel Disc` và `Filling Arc Pocket 1..4`.
 - Bánh sao không quay liên tục; nó index từng nấc:
 
 ```text
@@ -120,7 +121,7 @@ stepAngle = 360 / starWheelPocketCount
 pocketPitch = 2 * pi * starWheelPocketRadius / starWheelPocketCount
 ```
 
-- Với `starWheelPocketCount = 14`, mỗi nhịp bánh sao quay khoảng `25.7°`; khoảng cách giữa các chai ở filling dùng `pocketPitch`.
+- Với `starWheelPocketCount = 14`, mỗi nhịp bánh sao quay khoảng `25.7°`; chai trong pocket được index thêm một cung bằng `pocketPitch`.
 - `Filling Stop Gate` chặn các chai phía sau chưa đến lượt fill.
 - Khi đủ 4 chai vào vị trí, conveyor dừng toàn bộ.
 - Star Wheel dừng và khóa chai ở đúng vị trí dưới vòi.
@@ -128,7 +129,7 @@ pocketPitch = 2 * pi * starWheelPocketRadius / starWheelPocketCount
 - Chai được rót trong thời gian `fillingTimeSeconds`.
 - Khi chưa fill xong, conveyor không chạy.
 - Nếu turntable đã đủ buffer trong lúc conveyor dừng, turntable cũng dừng.
-- Sau khi rót xong, gate mở, conveyor chạy tiếp sang trạm QC.
+- Sau khi rót xong, chai rời star-wheel theo tiếp tuyến và conveyor chạy tiếp sang trạm QC.
 
 Logic lỗi tạo điểm nhấn:
 
