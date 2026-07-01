@@ -112,6 +112,14 @@ Logic vận hành:
 - Conveyor đưa chai vào một `Rotary Processing Cell` giống video tham chiếu: đĩa `Filling Star Wheel` trắng lớn nằm dưới cụm rót, QC, reject và capping.
 - `Filling Star Wheel` có biên dạng scallop/pocket lõm quanh viền, trong Hierarchy gồm `Scalloped Star Wheel Disc`, `Filling Indexed Pocket 1..4` và `Capping Indexed Pocket 1..4`.
 - 4 filling pocket nằm ngay dưới 4 vòi rót để mô phỏng cơ cấu giữ cổ/thân chai theo kiểu star-wheel thật.
+- Bánh sao không quay liên tục; nó index từng nấc:
+
+```text
+stepAngle = 360 / starWheelPocketCount
+pocketPitch = 2 * pi * starWheelPocketRadius / starWheelPocketCount
+```
+
+- Với `starWheelPocketCount = 18`, mỗi nhịp bánh sao quay `20°`; sau mỗi nhịp index, bottle trong pocket mới được rót.
 - `Filling Stop Gate` chặn các chai phía sau chưa đến lượt fill.
 - Khi đủ 4 chai vào vị trí, conveyor dừng toàn bộ.
 - Star Wheel dừng và khóa chai ở đúng vị trí dưới vòi.
@@ -148,8 +156,8 @@ Logic vận hành:
 
 - Chỉ chai `PASSED` mới đi tới trạm đóng nắp.
 - Chai `REJECTED` bị piston đẩy xuống reject chute trước khi tới capping.
-- 4 chai đạt chuẩn được index vào 4 vị trí `cappingFirstZ + slotIndex * cappingPitchM`.
-- Các vị trí capping nằm cùng đĩa `Filling Star Wheel`, phía sau vùng reject, giống cụm rotary star-wheel trong video.
+- 4 chai đạt chuẩn được index vào 4 pocket theo góc `cappingStartAngleDegrees + slotIndex * stepAngle`.
+- Các vị trí capping nằm cùng đĩa `Filling Star Wheel`, trong quarter sau của bánh sao, dùng góc `20° -> 80°`.
 - Khi đủ 4 chai, conveyor dừng, 4 `Capping Head` cùng hạ xuống để đóng nắp.
 - Trong lúc đóng nắp, các chai được khóa vị trí giống cơ cấu stop/index nên không bị trôi hoặc đâm vào nhau.
 - Sau khi đóng nắp, nắp chai được bật hiển thị, chai chuyển trạng thái `CAPPED` và đi tiếp tới `Accept Chute`.

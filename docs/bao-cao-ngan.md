@@ -39,7 +39,7 @@ Trong đó `omega` là vận tốc góc của mâm quay, `r` là khoảng cách 
 
 Thiết bị: cụm `Multiple Filling Nozzles`, `Liquid Vessel`, `Filling Stop Gate` và `Filling Star Wheel`.
 
-Turntable ở đầu line vẫn giữ vai trò buffer/caching table: chai rơi vào mâm, mâm xoay và xả từng chai qua outlet sang conveyor. Sau đó chai đi vào rotary processing cell giống video tham chiếu. Star Wheel dạng đĩa bánh sao trắng lớn có biên dạng scallop/pocket lõm quanh mép, nằm dưới cả cụm rót, QC, reject và capping. Trong Unity, cụm này được dựng bằng `Scalloped Star Wheel Disc`, `Filling Indexed Pocket 1..4` và `Capping Indexed Pocket 1..4`. Gate phía trước vùng filling chặn các chai chưa đến lượt. Khi đủ chai, conveyor dừng toàn bộ, Star Wheel khóa chai cố định tại slot và 4 vòi rót đồng thời trong thời gian `fillingTimeSeconds`. Nếu turntable đã đủ buffer trong lúc conveyor dừng, turntable cũng dừng để tránh tiếp tục cấp chai.
+Turntable ở đầu line vẫn giữ vai trò buffer/caching table: chai rơi vào mâm, mâm xoay và xả từng chai qua outlet sang conveyor. Sau đó chai đi vào rotary processing cell giống video tham chiếu. Star Wheel dạng đĩa bánh sao trắng lớn có biên dạng scallop/pocket lõm quanh mép, nằm dưới cả cụm rót, QC, reject và capping. Trong Unity, cụm này được dựng bằng `Scalloped Star Wheel Disc`, `Filling Indexed Pocket 1..4` và `Capping Indexed Pocket 1..4`. Bánh sao không quay liên tục mà index từng nấc `stepAngle = 360 / starWheelPocketCount`; quãng cung mỗi nấc là `pocketPitch = 2πR / starWheelPocketCount`. Với 18 pocket, mỗi nhịp quay 20 độ, sau mỗi nhịp bottle trong pocket mới được fill. Gate phía trước vùng filling chặn các chai chưa đến lượt. Khi đủ chai, conveyor dừng toàn bộ, Star Wheel khóa chai cố định tại slot và 4 vòi rót đồng thời trong thời gian `fillingTimeSeconds`. Nếu turntable đã đủ buffer trong lúc conveyor dừng, turntable cũng dừng để tránh tiếp tục cấp chai.
 
 Hệ thống mô phỏng:
 
@@ -67,7 +67,7 @@ Chai đạt đi thẳng xuống máng accept. Chai lỗi đến vị trí piston
 
 Thiết bị: `4 x Capping Head`, `Cap Feeder Bowl`, `Cap Feed Rail`.
 
-Chỉ chai đạt chuẩn mới đi tới trạm đóng nắp. Chai lỗi bị loại trước đó tại reject station. Cụm đóng nắp dùng 4 vị trí index nằm trên cùng đĩa Star Wheel: khi đủ 4 chai, conveyor dừng, 4 capping head cùng hạ xuống, nắp chai được bật hiển thị, chai chuyển trạng thái `CAPPED` rồi đi tiếp xuống accept chute. Các chai đang chờ được giữ khoảng cách tối thiểu trên slat chain để tránh va chạm khi line dừng/chạy lại.
+Chỉ chai đạt chuẩn mới đi tới trạm đóng nắp. Chai lỗi bị loại trước đó tại reject station. Cụm đóng nắp dùng 4 vị trí index nằm trên quarter sau của cùng đĩa Star Wheel, theo góc `20° -> 80°`: khi đủ 4 chai, conveyor dừng, 4 capping head cùng hạ xuống, nắp chai được bật hiển thị, chai chuyển trạng thái `CAPPED` rồi đi tiếp xuống accept chute. Các chai đang chờ được giữ khoảng cách tối thiểu trên slat chain để tránh va chạm khi line dừng/chạy lại.
 
 ## 4. Công thức và logic
 

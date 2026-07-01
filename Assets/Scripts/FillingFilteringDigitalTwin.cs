@@ -43,17 +43,17 @@ namespace ConveyorTwin
 
         [Header("Filling indexing")]
         public int fillingNozzleCount = 4;
-        public float fillingFirstZ = -1.95f;
-        public float fillingPitchM = 0.48f;
         public float fillingQueueStopZ = -2.45f;
         public float fillingSlotToleranceM = 0.03f;
         public int starWheelPocketCount = 8;
-        public float starWheelAngularSpeedDps = 120f;
+        public Vector3 starWheelCenter = new Vector3(1.18f, 0.82f, 0.55f);
+        public float starWheelPocketRadius = 1.18f;
+        public float starWheelIndexDurationSeconds = 0.32f;
+        public float fillingStartAngleDegrees = 210f;
+        public float cappingStartAngleDegrees = 20f;
 
         [Header("Capping indexing")]
         public int cappingHeadCount = 4;
-        public float cappingFirstZ = 3.2f;
-        public float cappingPitchM = 0.48f;
         public float cappingQueueStopZ = 2.75f;
         public float cappingSlotToleranceM = 0.03f;
         public float cappingTimeSeconds = 0.75f;
@@ -103,6 +103,9 @@ namespace ConveyorTwin
         public bool ConveyorStoppedForFilling { get; private set; }
         public bool TurntablePaused { get; private set; }
         public bool StarWheelLocked { get; private set; }
+        public bool StarWheelIndexing { get; private set; }
+        public float StarWheelStepAngleDegrees => 360f / Mathf.Max(1, starWheelPocketCount);
+        public float StarWheelPocketPitchM => Mathf.PI * 2f * starWheelPocketRadius / Mathf.Max(1, starWheelPocketCount);
         public bool CappingActive { get; private set; }
         public int BottlesAtFillingStation { get; private set; }
         public int BottlesAtCappingStation { get; private set; }
@@ -127,6 +130,7 @@ namespace ConveyorTwin
         private bool cappingStationBusy;
         private bool outletOccupied;
         private bool initializedTurntable;
+        private int starWheelIndex;
 
         private void Awake()
         {
@@ -155,7 +159,7 @@ namespace ConveyorTwin
             BottlesAtCappingStation = cappingSlotAssignments.Count;
             ConveyorStoppedForFilling = fillingStationBusy;
             ConveyorStoppedForCapping = cappingStationBusy;
-            StarWheelLocked = fillingStationBusy;
+            StarWheelLocked = fillingStationBusy || cappingStationBusy || StarWheelIndexing;
             CappingActive = cappingStationBusy;
         }
 
@@ -176,10 +180,7 @@ namespace ConveyorTwin
                 qcSensorBeam.localScale = scale;
             }
 
-            if (fillingStarWheel != null && !IsConveyorStopped())
-            {
-                fillingStarWheel.Rotate(Vector3.up, starWheelAngularSpeedDps * Time.deltaTime, Space.World);
-            }
+            // The processing star wheel is indexed by coroutine, one tooth pitch at a time.
         }
 
         private void InitializeTurntableIfNeeded()
@@ -484,8 +485,7 @@ namespace ConveyorTwin
                         var targetZ = FillingSlotZ(slotIndex);
                         if (position.z >= targetZ)
                         {
-                            position.z = targetZ;
-                            bottle.transform.position = position;
+                            SnapBottleToFillingSlot(bottle);
                             TryStartFillingBatch();
                             continue;
                         }
@@ -524,8 +524,7 @@ namespace ConveyorTwin
                         var targetZ = CappingSlotZ(cappingSlotIndex);
                         if (position.z >= targetZ)
                         {
-                            position.z = targetZ;
-                            bottle.transform.position = position;
+                            SnapBottleToCappingSlot(bottle);
                             TryStartCappingBatch();
                             continue;
                         }
@@ -573,7 +572,7 @@ namespace ConveyorTwin
 
         private bool IsConveyorStopped()
         {
-            return fillingStationBusy || cappingStationBusy;
+            return fillingStationBusy || cappingStationBusy || StarWheelIndexing;
         }
 
         private bool IsLineStartBlocked()
@@ -603,7 +602,7 @@ namespace ConveyorTwin
 
         private float FillingSlotZ(int slotIndex)
         {
-            return fillingFirstZ + slotIndex * fillingPitchM;
+            return FillingSlotPosition(slotIndex).z;
         }
 
         private void TryStartFillingBatch()
@@ -615,7 +614,7 @@ namespace ConveyorTwin
 
             foreach (var entry in fillingSlotAssignments)
             {
-                if (entry.Key == null || Mathf.Abs(entry.Key.transform.position.z - FillingSlotZ(entry.Value)) > fillingSlotToleranceM)
+                if (entry.Key == null || Vector3.Distance(entry.Key.transform.position, FillingSlotPosition(entry.Value)) > fillingSlotToleranceM)
                 {
                     return;
                 }
@@ -627,11 +626,6 @@ namespace ConveyorTwin
         private IEnumerator FillBottleBatch()
         {
             fillingStationBusy = true;
-            if (fillingStarWheel != null)
-            {
-                fillingStarWheel.localRotation = Quaternion.identity;
-            }
-
             var batch = new List<BottleProcessState>(fillingSlotAssignments.Keys);
             var targets = new Dictionary<BottleProcessState, float>();
 
@@ -650,6 +644,8 @@ namespace ConveyorTwin
                 bottle.isDefective = targetVolume < passThreshold;
                 targets[bottle] = targetVolume;
             }
+
+            yield return IndexStarWheelOnePitch(batch, SnapBottleToFillingSlot);
 
             var elapsed = 0f;
             while (elapsed < fillingTimeSeconds)
@@ -696,7 +692,7 @@ namespace ConveyorTwin
                 return;
             }
 
-            bottle.transform.position = new Vector3(lineX, bottle.transform.position.y, FillingSlotZ(slotIndex));
+            bottle.transform.position = FillingSlotPosition(slotIndex);
         }
 
         private void AssignCappingSlot(BottleProcessState bottle)
@@ -707,7 +703,79 @@ namespace ConveyorTwin
 
         private float CappingSlotZ(int slotIndex)
         {
-            return cappingFirstZ + slotIndex * cappingPitchM;
+            return CappingSlotPosition(slotIndex).z;
+        }
+
+        private Vector3 FillingSlotPosition(int slotIndex)
+        {
+            return StarWheelPocketPosition(FillingSlotAngle(slotIndex));
+        }
+
+        private Vector3 CappingSlotPosition(int slotIndex)
+        {
+            return StarWheelPocketPosition(CappingSlotAngle(slotIndex));
+        }
+
+        private float FillingSlotAngle(int slotIndex)
+        {
+            return fillingStartAngleDegrees - slotIndex * StarWheelStepAngleDegrees;
+        }
+
+        private float CappingSlotAngle(int slotIndex)
+        {
+            return cappingStartAngleDegrees + slotIndex * StarWheelStepAngleDegrees;
+        }
+
+        private Vector3 StarWheelPocketPosition(float angleDegrees)
+        {
+            var angle = angleDegrees * Mathf.Deg2Rad;
+            return new Vector3(
+                starWheelCenter.x + Mathf.Cos(angle) * starWheelPocketRadius,
+                starWheelCenter.y,
+                starWheelCenter.z + Mathf.Sin(angle) * starWheelPocketRadius);
+        }
+
+        private IEnumerator IndexStarWheelOnePitch(List<BottleProcessState> lockedBottles, System.Action<BottleProcessState> snapAction)
+        {
+            if (fillingStarWheel == null)
+            {
+                yield break;
+            }
+
+            StarWheelIndexing = true;
+            var startRotation = fillingStarWheel.localRotation;
+            var targetRotation = startRotation * Quaternion.Euler(0f, StarWheelStepAngleDegrees, 0f);
+            starWheelIndex = (starWheelIndex + 1) % Mathf.Max(1, starWheelPocketCount);
+            var elapsed = 0f;
+            var duration = Mathf.Max(0.05f, starWheelIndexDurationSeconds);
+
+            while (elapsed < duration)
+            {
+                elapsed += Time.deltaTime;
+                var ratio = Mathf.SmoothStep(0f, 1f, elapsed / duration);
+                fillingStarWheel.localRotation = Quaternion.Slerp(startRotation, targetRotation, ratio);
+
+                foreach (var bottle in lockedBottles)
+                {
+                    if (bottle != null)
+                    {
+                        snapAction(bottle);
+                    }
+                }
+
+                yield return null;
+            }
+
+            fillingStarWheel.localRotation = targetRotation;
+            foreach (var bottle in lockedBottles)
+            {
+                if (bottle != null)
+                {
+                    snapAction(bottle);
+                }
+            }
+
+            StarWheelIndexing = false;
         }
 
         private void TryStartCappingBatch()
@@ -719,7 +787,7 @@ namespace ConveyorTwin
 
             foreach (var entry in cappingSlotAssignments)
             {
-                if (entry.Key == null || Mathf.Abs(entry.Key.transform.position.z - CappingSlotZ(entry.Value)) > cappingSlotToleranceM)
+                if (entry.Key == null || Vector3.Distance(entry.Key.transform.position, CappingSlotPosition(entry.Value)) > cappingSlotToleranceM)
                 {
                     return;
                 }
@@ -732,11 +800,6 @@ namespace ConveyorTwin
         {
             cappingStationBusy = true;
             CappingActive = true;
-            if (fillingStarWheel != null)
-            {
-                fillingStarWheel.localRotation = Quaternion.identity;
-            }
-
             var batch = new List<BottleProcessState>(cappingSlotAssignments.Keys);
 
             foreach (var bottle in batch)
@@ -749,6 +812,8 @@ namespace ConveyorTwin
                 cappingBottles.Add(bottle);
                 SnapBottleToCappingSlot(bottle);
             }
+
+            yield return IndexStarWheelOnePitch(batch, SnapBottleToCappingSlot);
 
             var activeHeads = GetActiveCappingHeads();
             var basePositions = new Vector3[activeHeads.Count];
@@ -808,7 +873,7 @@ namespace ConveyorTwin
                 return;
             }
 
-            bottle.transform.position = new Vector3(lineX, bottle.transform.position.y, CappingSlotZ(slotIndex));
+            bottle.transform.position = CappingSlotPosition(slotIndex);
         }
 
         private List<Transform> GetActiveCappingHeads()
