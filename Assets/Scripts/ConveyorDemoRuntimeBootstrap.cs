@@ -416,7 +416,7 @@ namespace ConveyorTwin
             var hud = hudObject.AddComponent<FillingFilteringHud>();
             hud.process = process;
             hud.position = new Vector2(16f, 16f);
-            hud.size = new Vector2(580f, 350f);
+            hud.size = new Vector2(620f, 560f);
         }
 
         private Transform CreateFillingStarWheel(Transform parent, Material wheelMaterial, Material metalMaterial, Material pocketMaterial)
