@@ -44,6 +44,7 @@ namespace ConveyorTwin
             var starWheelMaterial = CreateMaterial(new Color(0.86f, 0.86f, 0.82f));
             var bottleMaterial = CreateMaterial(new Color(0.82f, 0.95f, 1f, 0.35f));
             var waterMaterial = CreateMaterial(new Color(0.1f, 0.55f, 1f, 0.85f));
+            var capMaterial = CreateMaterial(new Color(0.96f, 0.96f, 0.92f));
             var sensorMaterial = CreateMaterial(new Color(0.1f, 0.75f, 1f));
             var rejectMaterial = CreateMaterial(new Color(1f, 0.35f, 0.22f));
             var acceptMaterial = CreateMaterial(new Color(0.25f, 0.9f, 0.35f));
@@ -58,11 +59,11 @@ namespace ConveyorTwin
             var fillingStopGate = CreateFillingStopGate(root.transform, metalMaterial, rejectMaterial);
             var starWheel = CreateFillingStarWheel(root.transform, starWheelMaterial, metalMaterial, beltMaterial);
             var qcBeam = CreateQcSensor(root.transform, sensorMaterial, metalMaterial);
-            var cappingHeads = CreateCappingStation(root.transform, metalMaterial, waterMaterial);
+            var cappingHeads = CreateCappingStation(root.transform, metalMaterial, capMaterial);
             var pusher = CreatePusher(root.transform, metalMaterial, rejectMaterial);
             var acceptChute = CreateChute(root.transform, "Accept Chute", new Vector3(0.95f, 0.28f, 3.95f), acceptMaterial, 18f);
             var rejectChute = CreateChute(root.transform, "Reject Chute", new Vector3(-1.15f, 0.35f, 1.25f), rejectMaterial, -25f);
-            var bottleTemplate = CreateBottleTemplate(root.transform, bottleMaterial, waterMaterial);
+            var bottleTemplate = CreateBottleTemplate(root.transform, bottleMaterial, waterMaterial, capMaterial);
 
             var processObject = new GameObject("Filling Filtering Process Controller");
             processObject.transform.SetParent(root.transform);
@@ -362,7 +363,7 @@ namespace ConveyorTwin
             return chute.transform;
         }
 
-        private BottleProcessState CreateBottleTemplate(Transform parent, Material bottleMaterial, Material waterMaterial)
+        private BottleProcessState CreateBottleTemplate(Transform parent, Material bottleMaterial, Material waterMaterial, Material capMaterial)
         {
             var bottleRoot = new GameObject("Bottle Template");
             bottleRoot.transform.SetParent(parent);
@@ -385,9 +386,9 @@ namespace ConveyorTwin
             var cap = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             cap.name = "Bottle Cap";
             cap.transform.SetParent(bottleRoot.transform);
-            cap.transform.localPosition = new Vector3(0f, 0.67f, 0f);
-            cap.transform.localScale = new Vector3(0.085f, 0.05f, 0.085f);
-            cap.GetComponent<Renderer>().sharedMaterial = waterMaterial;
+            cap.transform.localPosition = new Vector3(0f, 0.72f, 0f);
+            cap.transform.localScale = new Vector3(0.11f, 0.055f, 0.11f);
+            cap.GetComponent<Renderer>().sharedMaterial = capMaterial;
             cap.SetActive(false);
 
             var liquid = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
@@ -402,6 +403,7 @@ namespace ConveyorTwin
             state.liquidRenderer = liquid.GetComponent<Renderer>();
             state.liquidVisual = liquid.transform;
             state.capVisual = cap.transform;
+            state.capRenderer = cap.GetComponent<Renderer>();
             state.SetVolume(0f);
             bottleRoot.SetActive(false);
             return state;
@@ -481,7 +483,6 @@ namespace ConveyorTwin
                 barrierSeg.transform.rotation = Quaternion.Euler(0f, -angleDegrees + 90f, 0f);
             }
 
-            CreateCube(parent, "Star Wheel Infeed Tangent Guide", new Vector3(-0.2f, 0.9f, -1.22f), new Vector3(0.5f, 0.12f, 0.055f), metalMaterial);
             CreateCube(parent, "Star Wheel Outfeed Tangent Guide", new Vector3(-0.18f, 0.9f, -0.1f), new Vector3(0.5f, 0.12f, 0.055f), metalMaterial);
             CreateCube(parent, "Filling Star Wheel Base", new Vector3(0.55f, 0.31f, -0.68f), new Vector3(1.55f, 0.16f, 1.7f), metalMaterial);
             return starWheelRoot.transform;
