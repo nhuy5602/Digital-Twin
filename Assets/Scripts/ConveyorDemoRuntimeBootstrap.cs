@@ -9,10 +9,11 @@ namespace ConveyorTwin
         private const string GeneratedRootName = "Generated Filling Filtering Twin Demo";
         private static readonly Vector3 FillingStarWheelVisualCenter = new Vector3(0.55f, 0.72f, -0.68f);
         private static readonly Vector3 FillingStarWheelBottleCenter = new Vector3(0.55f, 0.82f, -0.68f);
-        private const int FillingStarWheelPocketCount = 14;
+        private const int FillingStarWheelPocketCount = 8;
         private const float FillingStarWheelBottleRadius = 0.72f;
         private const float FillingStarWheelOuterRadius = 0.9f;
         private const float FillingStarWheelEntryAngleDegrees = 220f;
+        private const int FillingStationStartPocketIndex = 2;
         private const float FillingFirstZ = -1.2f;
         private const float CappingFirstZ = 1.65f;
         private const float CappingPitch = 0.42f;
@@ -86,7 +87,7 @@ namespace ConveyorTwin
             process.slatPitchM = 0.22f;
             process.conveyorSlipRatio = 0.02f;
             process.minimumBottleSpacingM = 0.32f;
-            process.fillingNozzleCount = 4;
+            process.fillingNozzleCount = 3;
             process.fillingFirstZ = FillingFirstZ;
             process.fillingQueueStopZ = -1.34f;
             process.qcZ = 0.65f;
@@ -102,6 +103,7 @@ namespace ConveyorTwin
             process.starWheelCenter = FillingStarWheelBottleCenter;
             process.starWheelPocketRadius = FillingStarWheelBottleRadius;
             process.starWheelEntryAngleDegrees = FillingStarWheelEntryAngleDegrees;
+            process.fillingStationStartPocketIndex = FillingStationStartPocketIndex;
             process.starWheelIndexDurationSeconds = 0.32f;
             process.infeedMotorSpeedRpm = 18f;
             process.fillingTimeSeconds = 1.35f;
@@ -109,6 +111,8 @@ namespace ConveyorTwin
             process.passThreshold = 0.95f;
             process.turntableCenter = new Vector3(0f, 0.82f, -4.7f);
             process.turntableRadius = 0.95f;
+            process.turntableBottleRadius = 0.11f;
+            process.outletCaptureRadius = 0.78f;
             process.releaseThreshold = 7;
             process.initialTurntableBottleCount = 12;
             process.maxTurntableBuffer = 16;
@@ -204,19 +208,26 @@ namespace ConveyorTwin
             table.name = "Infeed Turntable";
             table.transform.SetParent(parent);
             table.transform.position = new Vector3(0f, 0.48f, -4.7f);
-            table.transform.localScale = new Vector3(1.35f, 0.08f, 1.35f);
+            table.transform.localScale = new Vector3(1.9f, 0.08f, 1.9f);
             table.GetComponent<Renderer>().sharedMaterial = material;
 
-            for (var i = 0; i < 20; i++)
+            const int segments = 120;
+            const float rimRadius = 1.08f;
+            const float outletGapStartDegrees = 65f;
+            const float outletGapEndDegrees = 115f;
+            var segmentWidth = (2f * Mathf.PI * rimRadius / segments) * 1.12f;
+            for (var i = 0; i < segments; i++)
             {
-                var angle = i * Mathf.PI * 2f / 20f;
-                var rim = CreateCube(
-                    parent,
-                    "Turntable Safety Rim",
-                    new Vector3(Mathf.Cos(angle) * 1.38f, 0.78f, -4.7f + Mathf.Sin(angle) * 1.38f),
-                    new Vector3(0.16f, 0.34f, 0.08f),
-                    material);
-                rim.transform.rotation = Quaternion.Euler(0f, -angle * Mathf.Rad2Deg, 0f);
+                var angleDegrees = i * 360f / segments;
+                if (angleDegrees >= outletGapStartDegrees && angleDegrees <= outletGapEndDegrees)
+                {
+                    continue;
+                }
+
+                var angleRad = angleDegrees * Mathf.Deg2Rad;
+                var position = new Vector3(Mathf.Cos(angleRad) * rimRadius, 0.78f, -4.7f + Mathf.Sin(angleRad) * rimRadius);
+                var rim = CreateCube(parent, "Turntable Safety Rim", position, new Vector3(segmentWidth, 0.34f, 0.04f), material);
+                rim.transform.rotation = Quaternion.Euler(0f, -angleDegrees + 90f, 0f);
             }
 
             CreateCube(parent, "Turntable Outlet Gate", new Vector3(0f, 0.78f, -3.45f), new Vector3(0.55f, 0.26f, 0.08f), material);
@@ -269,9 +280,14 @@ namespace ConveyorTwin
             return Mathf.PI * 2f * FillingStarWheelBottleRadius / FillingStarWheelPocketCount;
         }
 
+        private static float StarWheelPocketAngleDegrees(int pocketIndex)
+        {
+            return FillingStarWheelEntryAngleDegrees - pocketIndex * (360f / FillingStarWheelPocketCount);
+        }
+
         private static float FillingSlotAngleDegrees(int slotIndex)
         {
-            return FillingStarWheelEntryAngleDegrees - slotIndex * (360f / FillingStarWheelPocketCount);
+            return StarWheelPocketAngleDegrees(FillingStationStartPocketIndex + slotIndex);
         }
 
         private static Vector3 FillingSlotPosition(int slotIndex, float y)
@@ -291,9 +307,9 @@ namespace ConveyorTwin
         private List<Transform> CreateFillingNozzles(Transform parent, Material metalMaterial, Material waterMaterial)
         {
             var nozzles = new List<Transform>();
-            CreateCube(parent, "Filling Nozzle Main Rail", new Vector3(-0.1f, 1.45f, -0.68f), new Vector3(1.05f, 0.08f, 1.55f), metalMaterial);
+            CreateCube(parent, "Filling Nozzle Main Rail", new Vector3(0.88f, 1.45f, -0.72f), new Vector3(0.95f, 0.08f, 1.2f), metalMaterial);
 
-            const int nozzleCount = 4;
+            const int nozzleCount = 3;
             for (var i = 0; i < nozzleCount; i++)
             {
                 var stationPosition = FillingSlotPosition(i, 0f);
@@ -356,21 +372,21 @@ namespace ConveyorTwin
             body.name = "Bottle Body";
             body.transform.SetParent(bottleRoot.transform);
             body.transform.localPosition = Vector3.zero;
-            body.transform.localScale = new Vector3(0.14f, 0.42f, 0.14f);
+            body.transform.localScale = new Vector3(0.18f, 0.42f, 0.18f);
             body.GetComponent<Renderer>().sharedMaterial = bottleMaterial;
 
             var neck = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             neck.name = "Bottle Neck";
             neck.transform.SetParent(bottleRoot.transform);
             neck.transform.localPosition = new Vector3(0f, 0.47f, 0f);
-            neck.transform.localScale = new Vector3(0.07f, 0.16f, 0.07f);
+            neck.transform.localScale = new Vector3(0.09f, 0.16f, 0.09f);
             neck.GetComponent<Renderer>().sharedMaterial = bottleMaterial;
 
             var cap = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             cap.name = "Bottle Cap";
             cap.transform.SetParent(bottleRoot.transform);
             cap.transform.localPosition = new Vector3(0f, 0.67f, 0f);
-            cap.transform.localScale = new Vector3(0.065f, 0.05f, 0.065f);
+            cap.transform.localScale = new Vector3(0.085f, 0.05f, 0.085f);
             cap.GetComponent<Renderer>().sharedMaterial = waterMaterial;
             cap.SetActive(false);
 
@@ -378,7 +394,7 @@ namespace ConveyorTwin
             liquid.name = "Bottle Liquid";
             liquid.transform.SetParent(bottleRoot.transform);
             liquid.transform.localPosition = new Vector3(0f, -0.32f, 0f);
-            liquid.transform.localScale = new Vector3(0.105f, 0.02f, 0.105f);
+            liquid.transform.localScale = new Vector3(0.14f, 0.02f, 0.14f);
             liquid.GetComponent<Renderer>().sharedMaterial = waterMaterial;
 
             var state = bottleRoot.AddComponent<BottleProcessState>();
@@ -423,13 +439,13 @@ namespace ConveyorTwin
 
             for (var i = 0; i < FillingStarWheelPocketCount; i++)
             {
-                var angleDegrees = FillingSlotAngleDegrees(i);
+                var angleDegrees = StarWheelPocketAngleDegrees(i);
                 var angle = angleDegrees * Mathf.Deg2Rad;
                 var pocket = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
                 pocket.name = $"Star Wheel Rim Pocket Shadow {i + 1}";
                 pocket.transform.SetParent(starWheelRoot.transform);
                 pocket.transform.localPosition = new Vector3(Mathf.Cos(angle) * 0.8f, 0.065f, Mathf.Sin(angle) * 0.8f);
-                pocket.transform.localScale = new Vector3(0.095f, 0.012f, 0.095f);
+                pocket.transform.localScale = new Vector3(0.18f, 0.012f, 0.18f);
                 pocket.GetComponent<Renderer>().sharedMaterial = pocketMaterial;
 
                 var divider = CreateCube(
@@ -441,9 +457,28 @@ namespace ConveyorTwin
                 divider.transform.rotation = Quaternion.Euler(0f, -angleDegrees, 0f);
             }
 
-            for (var i = 0; i < 4; i++)
+            const int starBarrierSegments = 80;
+            const float starBarrierRadius = 0.84f;
+            const float starBarrierStartDegrees = 255f;
+            const float starBarrierArcDegrees =  210f;
+            var starBarrierSegmentLength = starBarrierRadius * Mathf.Deg2Rad * (starBarrierArcDegrees / starBarrierSegments) * 1.18f;
+            var fixedGuardRoot = new GameObject("Fixed Star Wheel Guard");
+            fixedGuardRoot.transform.SetParent(parent);
+            for (var i = 0; i <= starBarrierSegments; i++)
             {
-                CreateStarWheelArcPocket(parent, $"Filling Arc Pocket {i + 1}", i, wheelMaterial, metalMaterial, pocketMaterial);
+                var angleDegrees = starBarrierStartDegrees + i * starBarrierArcDegrees / starBarrierSegments;
+                var angleRad = angleDegrees * Mathf.Deg2Rad;
+                var position = new Vector3(
+                    FillingStarWheelBottleCenter.x + Mathf.Cos(angleRad) * starBarrierRadius,
+                    0.9f,
+                    FillingStarWheelBottleCenter.z + Mathf.Sin(angleRad) * starBarrierRadius);
+                var barrierSeg = CreateCube(
+                    fixedGuardRoot.transform,
+                    "Star Wheel Continuous Barrier",
+                    position,
+                    new Vector3(starBarrierSegmentLength, 0.24f, 0.04f),
+                    metalMaterial);
+                barrierSeg.transform.rotation = Quaternion.Euler(0f, -angleDegrees + 90f, 0f);
             }
 
             CreateCube(parent, "Star Wheel Infeed Tangent Guide", new Vector3(-0.2f, 0.9f, -1.22f), new Vector3(0.5f, 0.12f, 0.055f), metalMaterial);
@@ -452,27 +487,6 @@ namespace ConveyorTwin
             return starWheelRoot.transform;
         }
 
-        private void CreateStarWheelArcPocket(Transform parent, string name, int slotIndex, Material wheelMaterial, Material metalMaterial, Material pocketMaterial)
-        {
-            var worldPocketPosition = FillingSlotPosition(slotIndex, FillingStarWheelBottleCenter.y);
-            var radial = new Vector3(worldPocketPosition.x - FillingStarWheelBottleCenter.x, 0f, worldPocketPosition.z - FillingStarWheelBottleCenter.z).normalized;
-            var tangent = new Vector3(-radial.z, 0f, radial.x);
-            var angle = FillingSlotAngleDegrees(slotIndex);
-
-            var socket = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-            socket.name = name;
-            socket.transform.SetParent(parent);
-            socket.transform.position = worldPocketPosition;
-            socket.transform.localScale = new Vector3(0.16f, 0.014f, 0.16f);
-            socket.GetComponent<Renderer>().sharedMaterial = pocketMaterial;
-
-            var jawA = CreateCube(parent, $"{name} Jaw A", worldPocketPosition + radial * 0.08f + tangent * 0.13f + Vector3.up * 0.04f, new Vector3(0.21f, 0.07f, 0.055f), wheelMaterial);
-            jawA.transform.rotation = Quaternion.Euler(0f, -angle, 0f);
-            var jawB = CreateCube(parent, $"{name} Jaw B", worldPocketPosition + radial * 0.08f - tangent * 0.13f + Vector3.up * 0.04f, new Vector3(0.21f, 0.07f, 0.055f), wheelMaterial);
-            jawB.transform.rotation = Quaternion.Euler(0f, -angle, 0f);
-            var guide = CreateCube(parent, $"{name} Fixed Back Guide", worldPocketPosition - radial * 0.16f, new Vector3(0.055f, 0.24f, 0.24f), metalMaterial);
-            guide.transform.rotation = Quaternion.Euler(0f, -angle, 0f);
-        }
 
         private Mesh CreateScallopedStarWheelMesh(int pocketCount, float outerRadius, float pocketDepth, float thickness, int samplesPerPocket, float pocketAngleOffsetDegrees)
         {

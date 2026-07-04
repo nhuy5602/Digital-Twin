@@ -42,7 +42,7 @@ namespace ConveyorTwin
         public float lineX = 0f;
 
         [Header("Filling indexing")]
-        public int fillingNozzleCount = 4;
+        public int fillingNozzleCount = 3;
         public float fillingFirstZ = -1.2f;
         public float fillingQueueStopZ = -2.45f;
         public float fillingSlotToleranceM = 0.03f;
@@ -50,6 +50,7 @@ namespace ConveyorTwin
         public Vector3 starWheelCenter = new Vector3(0.78f, 0.82f, -0.68f);
         public float starWheelPocketRadius = 0.78f;
         public float starWheelEntryAngleDegrees = 220f;
+        public int fillingStationStartPocketIndex = 2;
         public float starWheelIndexDurationSeconds = 0.32f;
 
         [Header("Capping indexing")]
@@ -79,7 +80,9 @@ namespace ConveyorTwin
         public float outletMoveTimeSeconds = 0.42f;
         public float turntableSurfaceGrip = 3.5f;
         public float turntableVelocityDamping = 0.96f;
-        public float outletCaptureRadius = 0.88f;
+        public float turntableBottleRadius = 0.11f;
+        [Range(0, 6)] public int turntableBottleSeparationIterations = 2;
+        public float outletCaptureRadius = 0.78f;
         public float outletAngleToleranceDegrees = 28f;
 
         [Header("Process settings")]
@@ -108,6 +111,7 @@ namespace ConveyorTwin
         public bool StarWheelIndexing { get; private set; }
         public float StarWheelStepAngleDegrees => 360f / Mathf.Max(1, starWheelPocketCount);
         public float StarWheelPocketPitchM => Mathf.PI * 2f * starWheelPocketRadius / Mathf.Max(1, starWheelPocketCount);
+        public int FillingStationEndPocketIndex => fillingStationStartPocketIndex + ActiveFillingNozzleCount - 1;
         public bool CappingActive { get; private set; }
         public int BottlesAtFillingStation { get; private set; }
         public int BottlesAtCappingStation { get; private set; }
@@ -130,10 +134,13 @@ namespace ConveyorTwin
         private int spawnedCount;
         private bool fillingStationBusy;
         private bool fillingCaptureBusy;
+        private bool fillingDischargeBusy;
         private bool cappingStationBusy;
         private bool outletOccupied;
         private bool initializedTurntable;
         private int starWheelIndex;
+
+        private float MaxTurntableBottleCenterRadius => Mathf.Max(0.05f, turntableRadius - turntableBottleRadius);
 
         private void Awake()
         {
@@ -160,9 +167,9 @@ namespace ConveyorTwin
             BottlesOnConveyorCount = lineBottles.Count;
             BottlesAtFillingStation = fillingSlotAssignments.Count;
             BottlesAtCappingStation = cappingSlotAssignments.Count;
-            ConveyorStoppedForFilling = fillingStationBusy || fillingCaptureBusy || StarWheelIndexing;
+            ConveyorStoppedForFilling = fillingStationBusy || fillingCaptureBusy || (StarWheelIndexing && !fillingDischargeBusy);
             ConveyorStoppedForCapping = cappingStationBusy;
-            StarWheelLocked = fillingStationBusy || fillingCaptureBusy || StarWheelIndexing;
+            StarWheelLocked = fillingStationBusy || fillingCaptureBusy || fillingDischargeBusy || StarWheelIndexing;
             CappingActive = cappingStationBusy;
         }
 
@@ -345,9 +352,10 @@ namespace ConveyorTwin
                 radial += bottle.turntableVelocity * Time.deltaTime;
                 radius = radial.magnitude;
 
-                if (radius > turntableRadius)
+                var maxCenterRadius = MaxTurntableBottleCenterRadius;
+                if (radius > maxCenterRadius)
                 {
-                    radial = radial.normalized * turntableRadius;
+                    radial = radial.normalized * maxCenterRadius;
                     var outwardSpeed = Vector2.Dot(bottle.turntableVelocity, radial.normalized);
                     if (outwardSpeed > 0f)
                     {
@@ -364,6 +372,8 @@ namespace ConveyorTwin
                     StartCoroutine(MoveBottleToOutlet(bottle));
                 }
             }
+
+            ResolveTurntableBottleSeparation();
         }
 
         private bool CanReleaseThroughOutlet(BottleProcessState bottle)
@@ -379,12 +389,96 @@ namespace ConveyorTwin
             bottleVector.y = 0f;
             outletVector.y = 0f;
 
-            if (bottleVector.magnitude < outletCaptureRadius)
+            var captureRadius = Mathf.Min(outletCaptureRadius, MaxTurntableBottleCenterRadius);
+            if (bottleVector.magnitude < captureRadius)
             {
                 return false;
             }
 
             return Vector3.Angle(bottleVector, outletVector) <= outletAngleToleranceDegrees;
+        }
+
+        private void ResolveTurntableBottleSeparation()
+        {
+            if (turntableBottleSeparationIterations <= 0 || turntableBottles.Count < 2)
+            {
+                return;
+            }
+
+            var minDistance = turntableBottleRadius * 2f;
+            var minDistanceSqr = minDistance * minDistance;
+
+            for (var iteration = 0; iteration < turntableBottleSeparationIterations; iteration++)
+            {
+                for (var i = 0; i < turntableBottles.Count - 1; i++)
+                {
+                    var first = turntableBottles[i];
+                    if (first == null || outletBottles.Contains(first))
+                    {
+                        continue;
+                    }
+
+                    for (var j = i + 1; j < turntableBottles.Count; j++)
+                    {
+                        var second = turntableBottles[j];
+                        if (second == null || outletBottles.Contains(second))
+                        {
+                            continue;
+                        }
+
+                        var firstRadial = TurntableRadial(first.transform.position);
+                        var secondRadial = TurntableRadial(second.transform.position);
+                        var delta = firstRadial - secondRadial;
+                        var distanceSqr = delta.sqrMagnitude;
+                        if (distanceSqr >= minDistanceSqr)
+                        {
+                            continue;
+                        }
+
+                        Vector2 direction;
+                        float distance;
+                        if (distanceSqr < 0.0001f)
+                        {
+                            var angle = (i * 73f + j * 137f) * Mathf.Deg2Rad;
+                            direction = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle));
+                            distance = 0f;
+                        }
+                        else
+                        {
+                            distance = Mathf.Sqrt(distanceSqr);
+                            direction = delta / distance;
+                        }
+
+                        var correction = direction * ((minDistance - distance) * 0.5f);
+                        SetTurntableRadialPosition(first, firstRadial + correction);
+                        SetTurntableRadialPosition(second, secondRadial - correction);
+
+                        first.turntableVelocity *= 0.9f;
+                        second.turntableVelocity *= 0.9f;
+                    }
+                }
+            }
+        }
+
+        private Vector2 TurntableRadial(Vector3 position)
+        {
+            return new Vector2(position.x - turntableCenter.x, position.z - turntableCenter.z);
+        }
+
+        private void SetTurntableRadialPosition(BottleProcessState bottle, Vector2 radial)
+        {
+            if (bottle == null)
+            {
+                return;
+            }
+
+            var maxCenterRadius = MaxTurntableBottleCenterRadius;
+            if (radial.sqrMagnitude > maxCenterRadius * maxCenterRadius)
+            {
+                radial = radial.normalized * maxCenterRadius;
+            }
+
+            bottle.transform.position = new Vector3(turntableCenter.x + radial.x, turntableCenter.y, turntableCenter.z + radial.y);
         }
 
         private IEnumerator MoveBottleToOutlet(BottleProcessState bottle)
@@ -575,7 +669,7 @@ namespace ConveyorTwin
 
         private bool IsConveyorStopped()
         {
-            return fillingStationBusy || fillingCaptureBusy || cappingStationBusy || StarWheelIndexing;
+            return fillingStationBusy || fillingCaptureBusy || cappingStationBusy || (StarWheelIndexing && !fillingDischargeBusy);
         }
 
         private bool IsLineStartBlocked()
@@ -597,11 +691,11 @@ namespace ConveyorTwin
             return false;
         }
 
-        private float FillingEntryZ => FillingSlotPosition(0).z;
+        private float FillingEntryZ => StarWheelSlotPosition(0).z;
 
         private bool CanCaptureBottleForFilling()
         {
-            return !fillingStationBusy && !fillingCaptureBusy && !StarWheelIndexing && fillingSlotAssignments.Count < ActiveFillingNozzleCount;
+            return !fillingStationBusy && !fillingCaptureBusy && !fillingDischargeBusy && !StarWheelIndexing && fillingSlotAssignments.Count < starWheelPocketCount;
         }
 
         private IEnumerator CaptureBottleIntoStarWheel(BottleProcessState bottle)
@@ -612,6 +706,7 @@ namespace ConveyorTwin
             }
 
             fillingCaptureBusy = true;
+            lineBottles.Remove(bottle);
             fillingBottles.Add(bottle);
             bottle.transform.position = new Vector3(lineX, starWheelCenter.y, FillingEntryZ);
 
@@ -629,7 +724,7 @@ namespace ConveyorTwin
                 yield return IndexStarWheelOnePitch(indexedBottles, 1);
                 foreach (var entry in indexedBottles)
                 {
-                    fillingSlotAssignments[entry.Key] = Mathf.Clamp(entry.Value + 1, 0, ActiveFillingNozzleCount - 1);
+                    fillingSlotAssignments[entry.Key] = Mathf.Min(entry.Value + 1, starWheelPocketCount - 1);
                 }
             }
 
@@ -641,26 +736,50 @@ namespace ConveyorTwin
 
         private void TryStartFillingBatch()
         {
-            if (fillingStationBusy || fillingSlotAssignments.Count < ActiveFillingNozzleCount)
+            if (fillingStationBusy || fillingDischargeBusy)
             {
                 return;
             }
 
-            foreach (var entry in fillingSlotAssignments)
+            var batch = GetReadyFillingBatch();
+            if (batch.Count < ActiveFillingNozzleCount)
             {
-                if (entry.Key == null || Vector3.Distance(entry.Key.transform.position, FillingSlotPosition(entry.Value)) > fillingSlotToleranceM)
-                {
-                    return;
-                }
+                return;
             }
 
-            StartCoroutine(FillBottleBatch());
+            StartCoroutine(FillBottleBatch(batch));
         }
 
-        private IEnumerator FillBottleBatch()
+        private List<BottleProcessState> GetReadyFillingBatch()
+        {
+            var batch = new List<BottleProcessState>();
+            for (var pocketIndex = fillingStationStartPocketIndex; pocketIndex <= FillingStationEndPocketIndex; pocketIndex++)
+            {
+                BottleProcessState bottleInPocket = null;
+                foreach (var entry in fillingSlotAssignments)
+                {
+                    if (entry.Value == pocketIndex)
+                    {
+                        bottleInPocket = entry.Key;
+                        break;
+                    }
+                }
+
+                if (bottleInPocket == null || Vector3.Distance(bottleInPocket.transform.position, StarWheelSlotPosition(pocketIndex)) > fillingSlotToleranceM)
+                {
+                    batch.Clear();
+                    return batch;
+                }
+
+                batch.Add(bottleInPocket);
+            }
+
+            return batch;
+        }
+
+        private IEnumerator FillBottleBatch(List<BottleProcessState> batch)
         {
             fillingStationBusy = true;
-            var batch = new List<BottleProcessState>(fillingSlotAssignments.Keys);
             var targets = new Dictionary<BottleProcessState, float>();
 
             foreach (var bottle in batch)
@@ -712,7 +831,10 @@ namespace ConveyorTwin
 
             LastFillingTimeSeconds = fillingTimeSeconds;
             LiquidLevelLiters = Mathf.Max(0f, LiquidLevelLiters - totalFilledVolume * bottleCapacityLiters);
+            fillingStationBusy = false;
+            fillingDischargeBusy = true;
             yield return ReleaseFilledBatchToConveyor(batch);
+            fillingDischargeBusy = false;
 
             foreach (var bottle in batch)
             {
@@ -722,8 +844,15 @@ namespace ConveyorTwin
                 }
             }
 
-            fillingSlotAssignments.Clear();
-            fillingStationBusy = false;
+            foreach (var bottle in batch)
+            {
+                if (bottle != null)
+                {
+                    fillingSlotAssignments.Remove(bottle);
+                }
+            }
+
+            TryStartFillingBatch();
         }
 
         private void SnapBottleToFillingSlot(BottleProcessState bottle)
@@ -733,7 +862,7 @@ namespace ConveyorTwin
                 return;
             }
 
-            bottle.transform.position = FillingSlotPosition(slotIndex);
+            bottle.transform.position = StarWheelSlotPosition(slotIndex);
         }
 
         private void AssignCappingSlot(BottleProcessState bottle)
@@ -749,11 +878,7 @@ namespace ConveyorTwin
 
         private Vector3 FillingSlotPosition(int slotIndex)
         {
-            var angle = FillingSlotAngleDegrees(slotIndex) * Mathf.Deg2Rad;
-            return new Vector3(
-                starWheelCenter.x + Mathf.Cos(angle) * starWheelPocketRadius,
-                starWheelCenter.y,
-                starWheelCenter.z + Mathf.Sin(angle) * starWheelPocketRadius);
+            return StarWheelSlotPosition(fillingStationStartPocketIndex + slotIndex);
         }
 
         private Vector3 CappingSlotPosition(int slotIndex)
@@ -763,7 +888,7 @@ namespace ConveyorTwin
 
         private float FillingSlotAngleDegrees(int slotIndex)
         {
-            return starWheelEntryAngleDegrees - slotIndex * StarWheelStepAngleDegrees;
+            return StarWheelSlotAngleDegrees(fillingStationStartPocketIndex + slotIndex);
         }
 
         private IEnumerator IndexStarWheelOnePitch(Dictionary<BottleProcessState, int> indexedBottles, int slotDelta)
@@ -775,7 +900,7 @@ namespace ConveyorTwin
 
             StarWheelIndexing = true;
             var startRotation = fillingStarWheel.localRotation;
-            var targetRotation = startRotation * Quaternion.Euler(0f, slotDelta * StarWheelStepAngleDegrees, 0f);
+            var targetRotation = startRotation * Quaternion.Euler(0f, -slotDelta * StarWheelStepAngleDegrees, 0f);
             starWheelIndex = (starWheelIndex + slotDelta) % Mathf.Max(1, starWheelPocketCount);
             var elapsed = 0f;
             var duration = Mathf.Max(0.05f, starWheelIndexDurationSeconds);
@@ -813,19 +938,21 @@ namespace ConveyorTwin
 
         private Vector3 StarWheelSlotPosition(float slotIndex)
         {
-            var angle = (starWheelEntryAngleDegrees - slotIndex * StarWheelStepAngleDegrees) * Mathf.Deg2Rad;
+            var angle = StarWheelSlotAngleDegrees(slotIndex) * Mathf.Deg2Rad;
             return new Vector3(
                 starWheelCenter.x + Mathf.Cos(angle) * starWheelPocketRadius,
                 starWheelCenter.y,
                 starWheelCenter.z + Mathf.Sin(angle) * starWheelPocketRadius);
         }
 
+        private float StarWheelSlotAngleDegrees(float slotIndex)
+        {
+            return starWheelEntryAngleDegrees + slotIndex * StarWheelStepAngleDegrees;
+        }
+
         private IEnumerator ReleaseFilledBatchToConveyor(List<BottleProcessState> batch)
         {
-            var startPositions = new Dictionary<BottleProcessState, Vector3>();
-            var endPositions = new Dictionary<BottleProcessState, Vector3>();
-            var exitZ = FillingSlotPosition(ActiveFillingNozzleCount - 1).z + minimumBottleSpacingM * 0.4f;
-
+            var activeSlots = new Dictionary<BottleProcessState, int>();
             foreach (var bottle in batch)
             {
                 if (bottle == null || !fillingSlotAssignments.TryGetValue(bottle, out var slotIndex))
@@ -833,35 +960,73 @@ namespace ConveyorTwin
                     continue;
                 }
 
-                startPositions[bottle] = bottle.transform.position;
-                var queueOffset = ActiveFillingNozzleCount - 1 - slotIndex;
-                endPositions[bottle] = new Vector3(lineX, starWheelCenter.y, exitZ - queueOffset * minimumBottleSpacingM);
+                activeSlots[bottle] = slotIndex;
             }
 
-            var elapsed = 0f;
-            var duration = Mathf.Max(0.12f, starWheelIndexDurationSeconds);
-            while (elapsed < duration)
+            var exitPocketIndex = FillingStationEndPocketIndex + 2;
+            var exitPoint = StarWheelSlotPosition(exitPocketIndex);
+            var baseExitZ = exitPoint.z + minimumBottleSpacingM * 0.6f;
+            var totalReleaseCount = activeSlots.Count;
+            var releasedCount = 0;
+            var guard = 0;
+
+            while (activeSlots.Count > 0 && guard < starWheelPocketCount * 3)
             {
-                elapsed += Time.deltaTime;
-                var ratio = Mathf.SmoothStep(0f, 1f, elapsed / duration);
-                foreach (var entry in startPositions)
+                guard++;
+                yield return IndexStarWheelOnePitch(activeSlots, 1);
+
+                var readyToExit = new List<BottleProcessState>();
+                var slotSnapshot = new List<KeyValuePair<BottleProcessState, int>>(activeSlots);
+                foreach (var entry in slotSnapshot)
                 {
-                    if (entry.Key != null && endPositions.TryGetValue(entry.Key, out var endPosition))
+                    var newPocketIndex = Mathf.Min(entry.Value + 1, exitPocketIndex);
+                    fillingSlotAssignments[entry.Key] = newPocketIndex;
+                    activeSlots[entry.Key] = newPocketIndex;
+
+                    if (newPocketIndex >= exitPocketIndex)
                     {
-                        entry.Key.transform.position = Vector3.Lerp(entry.Value, endPosition, ratio);
+                        readyToExit.Add(entry.Key);
                     }
                 }
 
+                readyToExit.Sort((left, right) => activeSlots[right].CompareTo(activeSlots[left]));
+                foreach (var bottle in readyToExit)
+                {
+                    if (bottle == null)
+                    {
+                        activeSlots.Remove(bottle);
+                        continue;
+                    }
+
+                    var finalZ = baseExitZ + (totalReleaseCount - 1 - releasedCount) * minimumBottleSpacingM;
+                    releasedCount++;
+                    yield return ReleaseOneFilledBottleToConveyor(bottle, finalZ);
+                    activeSlots.Remove(bottle);
+                }
+            }
+        }
+        private IEnumerator ReleaseOneFilledBottleToConveyor(BottleProcessState bottle, float finalZ)
+        {
+            if (bottle == null)
+            {
+                yield break;
+            }
+            var tangentStart = bottle.transform.position;
+            var tangentEnd = new Vector3(lineX, starWheelCenter.y, finalZ);
+            var elapsed = 0f;
+            var tangentDuration = Mathf.Max(0.18f, starWheelIndexDurationSeconds * 1.1f);
+            while (elapsed < tangentDuration)
+            {
+                elapsed += Time.deltaTime;
+                var ratio = Mathf.SmoothStep(0f, 1f, elapsed / tangentDuration);
+                bottle.transform.position = Vector3.Lerp(tangentStart, tangentEnd, ratio);
                 yield return null;
             }
 
-            foreach (var entry in endPositions)
-            {
-                if (entry.Key != null)
-                {
-                    entry.Key.transform.position = entry.Value;
-                }
-            }
+            bottle.transform.position = tangentEnd;
+            fillingBottles.Remove(bottle);
+            fillingSlotAssignments.Remove(bottle);
+            lineBottles.Add(bottle);
         }
 
         private void TryStartCappingBatch()
