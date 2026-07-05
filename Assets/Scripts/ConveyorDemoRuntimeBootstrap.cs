@@ -14,6 +14,8 @@ namespace ConveyorTwin
         private const float FillingStarWheelOuterRadius = 0.9f;
         private const float FillingStarWheelEntryAngleDegrees = 220f;
         private const int FillingStationStartPocketIndex = 2;
+        private const float FillingNozzleScaleY = 0.32f;
+        private const float FillingNozzleClusterLift = FillingNozzleScaleY * 2f;
         private const float FillingFirstZ = -1.2f;
         private const float CappingFirstZ = 1.65f;
         private const float CappingPitch = 0.42f;
@@ -55,7 +57,7 @@ namespace ConveyorTwin
             var bottleSpawnPoint = CreateBottleDropper(root.transform, metalMaterial);
             var turntableOutlet = CreateTurntableOutlet(root.transform, metalMaterial);
             var vesselParts = CreateLiquidVessel(root.transform, metalMaterial, waterMaterial);
-            var nozzles = CreateFillingNozzles(root.transform, metalMaterial, waterMaterial);
+            var nozzleParts = CreateFillingNozzles(root.transform, metalMaterial, waterMaterial);
             var fillingStopGate = CreateFillingStopGate(root.transform, metalMaterial, rejectMaterial);
             var starWheel = CreateFillingStarWheel(root.transform, starWheelMaterial, metalMaterial, beltMaterial);
             var qcBeam = CreateQcSensor(root.transform, sensorMaterial, metalMaterial);
@@ -71,8 +73,9 @@ namespace ConveyorTwin
             process.infeedTurntable = turntable;
             process.bottleSpawnPoint = bottleSpawnPoint;
             process.turntableOutlet = turntableOutlet;
-            process.fillingNozzle = nozzles.Count > 0 ? nozzles[0] : null;
-            process.fillingNozzles = nozzles;
+            process.fillingNozzle = nozzleParts.nozzles.Count > 0 ? nozzleParts.nozzles[0] : null;
+            process.fillingNozzles = nozzleParts.nozzles;
+            process.fillingNozzleSprings = nozzleParts.springs;
             process.fillingStopGate = fillingStopGate;
             process.fillingStarWheel = starWheel;
             process.liquidVessel = vesselParts.vessel;
@@ -262,7 +265,7 @@ namespace ConveyorTwin
             var vessel = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             vessel.name = "Liquid Vessel";
             vessel.transform.SetParent(parent);
-            vessel.transform.position = new Vector3(-1.7f, 1.8f, -0.62f);
+            vessel.transform.position = new Vector3(0.88f, 2.45f + FillingNozzleClusterLift, -0.72f);
             vessel.transform.localScale = new Vector3(0.55f, 0.95f, 0.55f);
             vessel.GetComponent<Renderer>().sharedMaterial = metalMaterial;
 
@@ -283,7 +286,7 @@ namespace ConveyorTwin
 
         private static float StarWheelPocketAngleDegrees(int pocketIndex)
         {
-            return FillingStarWheelEntryAngleDegrees - pocketIndex * (360f / FillingStarWheelPocketCount);
+            return FillingStarWheelEntryAngleDegrees + pocketIndex * (360f / FillingStarWheelPocketCount);
         }
 
         private static float FillingSlotAngleDegrees(int slotIndex)
@@ -305,22 +308,27 @@ namespace ConveyorTwin
             return new Vector3(0f, y, CappingFirstZ + slotIndex * CappingPitch);
         }
 
-        private List<Transform> CreateFillingNozzles(Transform parent, Material metalMaterial, Material waterMaterial)
+        private (List<Transform> nozzles, List<Transform> springs) CreateFillingNozzles(Transform parent, Material metalMaterial, Material waterMaterial)
         {
             var nozzles = new List<Transform>();
-            CreateCube(parent, "Filling Nozzle Main Rail", new Vector3(0.88f, 1.45f, -0.72f), new Vector3(0.95f, 0.08f, 1.2f), metalMaterial);
+            var springs = new List<Transform>();
+            CreateCube(parent, "Filling Nozzle Main Rail", new Vector3(0.88f, 1.45f + FillingNozzleClusterLift, -0.72f), new Vector3(0.95f, 0.08f, 1.2f), metalMaterial);
 
             const int nozzleCount = 3;
             for (var i = 0; i < nozzleCount; i++)
             {
                 var stationPosition = FillingSlotPosition(i, 0f);
-                CreateCube(parent, $"Nozzle Spring {i + 1}", new Vector3(stationPosition.x, 1.34f, stationPosition.z), new Vector3(0.08f, 0.18f, 0.08f), metalMaterial);
+                var nozzleAssembly = new GameObject($"Filling Nozzle Assembly {i + 1}");
+                nozzleAssembly.transform.SetParent(parent);
+                nozzleAssembly.transform.position = Vector3.zero;
+
+                var spring = CreateCube(nozzleAssembly.transform, $"Nozzle Spring {i + 1}", new Vector3(stationPosition.x, 1.34f + FillingNozzleClusterLift, stationPosition.z), new Vector3(0.08f, 0.18f, 0.08f), metalMaterial);
 
                 var nozzle = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
                 nozzle.name = $"Filling Nozzle {i + 1}";
-                nozzle.transform.SetParent(parent);
-                nozzle.transform.position = new Vector3(stationPosition.x, 1.08f, stationPosition.z);
-                nozzle.transform.localScale = new Vector3(0.07f, 0.32f, 0.07f);
+                nozzle.transform.SetParent(nozzleAssembly.transform);
+                nozzle.transform.position = new Vector3(stationPosition.x, 1.08f + FillingNozzleClusterLift, stationPosition.z);
+                nozzle.transform.localScale = new Vector3(0.07f, FillingNozzleScaleY, 0.07f);
                 nozzle.GetComponent<Renderer>().sharedMaterial = metalMaterial;
 
                 var flow = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
@@ -329,11 +337,13 @@ namespace ConveyorTwin
                 flow.transform.localPosition = new Vector3(0f, -0.7f, 0f);
                 flow.transform.localScale = new Vector3(0.22f, 0.55f, 0.22f);
                 flow.GetComponent<Renderer>().sharedMaterial = waterMaterial;
+                flow.SetActive(false);
 
                 nozzles.Add(nozzle.transform);
+                springs.Add(spring.transform);
             }
 
-            return nozzles;
+            return (nozzles, springs);
         }
 
         private Transform CreateFillingStopGate(Transform parent, Material metalMaterial, Material gateMaterial)
@@ -484,7 +494,7 @@ namespace ConveyorTwin
             }
 
             CreateCube(parent, "Star Wheel Outfeed Tangent Guide", new Vector3(-0.18f, 0.9f, -0.1f), new Vector3(0.5f, 0.12f, 0.055f), metalMaterial);
-            CreateCube(parent, "Filling Star Wheel Base", new Vector3(0.55f, 0.31f, -0.68f), new Vector3(1.55f, 0.16f, 1.7f), metalMaterial);
+            CreateCube(parent, "Filling Star Wheel Base", new Vector3(0.55f, 0.31f, -0.68f), new Vector3(1.7617f, 0.16f, 1.7f), metalMaterial);
             return starWheelRoot.transform;
         }
 
@@ -564,24 +574,28 @@ namespace ConveyorTwin
             for (var i = 0; i < headCount; i++)
             {
                 var stationPosition = CappingSlotPosition(i, 0f);
-                CreateCube(parent, $"Capping Spring {i + 1}", new Vector3(stationPosition.x, 1.34f, stationPosition.z), new Vector3(0.08f, 0.18f, 0.08f), metalMaterial);
+                var headAssembly = new GameObject($"Capping Head Assembly {i + 1}");
+                headAssembly.transform.SetParent(parent);
+                headAssembly.transform.position = Vector3.zero;
+
+                CreateCube(headAssembly.transform, $"Capping Spring {i + 1}", new Vector3(stationPosition.x, 1.88f, stationPosition.z), new Vector3(0.08f, 0.22f, 0.08f), metalMaterial);
 
                 var head = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
                 head.name = $"Capping Head {i + 1}";
-                head.transform.SetParent(parent);
-                head.transform.position = new Vector3(stationPosition.x, 1.1f, stationPosition.z);
-                head.transform.localScale = new Vector3(0.1f, 0.18f, 0.1f);
+                head.transform.SetParent(headAssembly.transform);
+                head.transform.position = new Vector3(stationPosition.x, 1.66f, stationPosition.z);
+                head.transform.localScale = new Vector3(0.11f, 0.16f, 0.11f);
                 head.GetComponent<Renderer>().sharedMaterial = metalMaterial;
-                heads.Add(head.transform);
 
                 var capReady = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
                 capReady.name = $"Queued Cap {i + 1}";
-                capReady.transform.SetParent(parent);
-                capReady.transform.position = new Vector3(stationPosition.x, 0.98f, stationPosition.z);
-                capReady.transform.localScale = new Vector3(0.07f, 0.018f, 0.07f);
+                capReady.transform.SetParent(headAssembly.transform);
+                capReady.transform.position = new Vector3(stationPosition.x, 1.49f, stationPosition.z);
+                capReady.transform.localScale = new Vector3(0.095f, 0.022f, 0.095f);
                 capReady.GetComponent<Renderer>().sharedMaterial = capMaterial;
 
                 CreateCube(parent, $"Capping Bottle Stop {i + 1}", new Vector3(-0.22f, 0.78f, stationPosition.z), new Vector3(0.07f, 0.18f, 0.12f), metalMaterial);
+                heads.Add(headAssembly.transform);
             }
 
             var capFeed = GameObject.CreatePrimitive(PrimitiveType.Cylinder);

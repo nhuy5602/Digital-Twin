@@ -18,6 +18,7 @@ namespace ConveyorTwin
         public Transform turntableOutlet;
         public Transform fillingNozzle;
         public List<Transform> fillingNozzles = new List<Transform>();
+        public List<Transform> fillingNozzleSprings = new List<Transform>();
         public Transform fillingStopGate;
         public Transform fillingStarWheel;
         public Transform liquidVessel;
@@ -52,6 +53,8 @@ namespace ConveyorTwin
         public float starWheelEntryAngleDegrees = 220f;
         public int fillingStationStartPocketIndex = 2;
         public float starWheelIndexDurationSeconds = 0.32f;
+        public float fillingNozzleStrokeM = 0.26f;
+        public float fillingNozzleMoveSeconds = 0.18f;
 
         [Header("Capping indexing")]
         public int cappingHeadCount = 4;
@@ -152,6 +155,11 @@ namespace ConveyorTwin
                     bottle.RefreshVisuals();
                 }
             }
+        }
+
+        private void Start()
+        {
+            SetFillingFlowVisuals(GetActiveFillingNozzles(), false);
         }
 
         private void Update()
@@ -786,6 +794,11 @@ namespace ConveyorTwin
         {
             fillingStationBusy = true;
             var targets = new Dictionary<BottleProcessState, float>();
+            var activeNozzles = GetActiveFillingNozzles();
+            var activeSprings = GetActiveFillingNozzleSprings(activeNozzles);
+            var springBasePositions = GetTransformPositions(activeSprings);
+            var springDownPositions = OffsetPositions(springBasePositions, Vector3.down * fillingNozzleStrokeM);
+            SetFillingFlowVisuals(activeNozzles, false);
 
             foreach (var bottle in batch)
             {
@@ -803,24 +816,31 @@ namespace ConveyorTwin
                 targets[bottle] = targetVolume;
             }
 
+            yield return MoveFillingNozzles(activeSprings, springBasePositions, springDownPositions, fillingNozzleMoveSeconds, batch);
+            SetFillingFlowVisuals(activeNozzles, true);
+
             var elapsed = 0f;
+            var previousRatio = 0f;
             while (elapsed < fillingTimeSeconds)
             {
                 elapsed += Time.deltaTime;
-                var ratio = elapsed / fillingTimeSeconds;
+                var ratio = Mathf.Clamp01(elapsed / fillingTimeSeconds);
+                var frameFilledVolume = 0f;
                 foreach (var bottle in batch)
                 {
                     if (bottle != null && targets.TryGetValue(bottle, out var targetVolume))
                     {
                         SnapBottleToFillingSlot(bottle);
                         bottle.SetVolume(Mathf.Lerp(0f, targetVolume, ratio));
+                        frameFilledVolume += Mathf.Max(0f, ratio - previousRatio) * targetVolume;
                     }
                 }
 
+                LiquidLevelLiters = Mathf.Max(0f, LiquidLevelLiters - frameFilledVolume * bottleCapacityLiters);
+                previousRatio = ratio;
                 yield return null;
             }
 
-            var totalFilledVolume = 0f;
             foreach (var bottle in batch)
             {
                 if (bottle == null || !targets.TryGetValue(bottle, out var targetVolume))
@@ -831,11 +851,11 @@ namespace ConveyorTwin
                 bottle.SetVolume(targetVolume);
                 bottle.status = BottleQualityStatus.Filled;
                 bottle.fillingCompleted = true;
-                totalFilledVolume += targetVolume;
             }
 
             LastFillingTimeSeconds = fillingTimeSeconds;
-            LiquidLevelLiters = Mathf.Max(0f, LiquidLevelLiters - totalFilledVolume * bottleCapacityLiters);
+            SetFillingFlowVisuals(activeNozzles, false);
+            yield return MoveFillingNozzles(activeSprings, springDownPositions, springBasePositions, fillingNozzleMoveSeconds, batch);
             fillingStationBusy = false;
             TryStartFillingBatch();
         }
@@ -848,6 +868,156 @@ namespace ConveyorTwin
             }
 
             bottle.transform.position = StarWheelSlotPosition(slotIndex);
+        }
+
+        private List<Transform> GetActiveFillingNozzles()
+        {
+            var activeNozzles = new List<Transform>();
+            var nozzleLimit = ActiveFillingNozzleCount;
+            foreach (var nozzle in fillingNozzles)
+            {
+                if (nozzle != null)
+                {
+                    activeNozzles.Add(nozzle);
+                    if (activeNozzles.Count >= nozzleLimit)
+                    {
+                        break;
+                    }
+                }
+            }
+
+            if (activeNozzles.Count == 0 && fillingNozzle != null)
+            {
+                activeNozzles.Add(fillingNozzle);
+            }
+
+            return activeNozzles;
+        }
+
+        private List<Transform> GetActiveFillingNozzleSprings(List<Transform> activeNozzles)
+        {
+            var activeSprings = new List<Transform>();
+            var springLimit = ActiveFillingNozzleCount;
+            foreach (var spring in fillingNozzleSprings)
+            {
+                if (spring != null)
+                {
+                    activeSprings.Add(spring);
+                    if (activeSprings.Count >= springLimit)
+                    {
+                        return activeSprings;
+                    }
+                }
+            }
+
+            foreach (var nozzle in activeNozzles)
+            {
+                if (nozzle == null)
+                {
+                    continue;
+                }
+
+                var searchRoot = nozzle.parent != null ? nozzle.parent : nozzle;
+                foreach (var child in searchRoot.GetComponentsInChildren<Transform>(true))
+                {
+                    if (child != null && child.name.StartsWith("Nozzle Spring"))
+                    {
+                        activeSprings.Add(child);
+                        break;
+                    }
+                }
+
+                if (activeSprings.Count >= springLimit)
+                {
+                    break;
+                }
+            }
+
+            return activeSprings;
+        }
+
+        private Vector3[] GetTransformPositions(List<Transform> transforms)
+        {
+            var positions = new Vector3[transforms.Count];
+            for (var i = 0; i < transforms.Count; i++)
+            {
+                positions[i] = transforms[i].position;
+            }
+
+            return positions;
+        }
+
+        private Vector3[] OffsetPositions(Vector3[] positions, Vector3 offset)
+        {
+            var offsetPositions = new Vector3[positions.Length];
+            for (var i = 0; i < positions.Length; i++)
+            {
+                offsetPositions[i] = positions[i] + offset;
+            }
+
+            return offsetPositions;
+        }
+
+        private IEnumerator MoveFillingNozzles(List<Transform> activeNozzles, Vector3[] from, Vector3[] to, float duration, List<BottleProcessState> batch)
+        {
+            if (activeNozzles == null || activeNozzles.Count == 0)
+            {
+                yield break;
+            }
+
+            var elapsed = 0f;
+            var moveDuration = Mathf.Max(0.05f, duration);
+            while (elapsed < moveDuration)
+            {
+                elapsed += Time.deltaTime;
+                var ratio = Mathf.SmoothStep(0f, 1f, elapsed / moveDuration);
+                for (var i = 0; i < activeNozzles.Count; i++)
+                {
+                    if (activeNozzles[i] != null)
+                    {
+                        activeNozzles[i].position = Vector3.Lerp(from[i], to[i], ratio);
+                    }
+                }
+
+                SnapFillingBatch(batch);
+                yield return null;
+            }
+
+            for (var i = 0; i < activeNozzles.Count; i++)
+            {
+                if (activeNozzles[i] != null)
+                {
+                    activeNozzles[i].position = to[i];
+                }
+            }
+        }
+
+        private void SnapFillingBatch(List<BottleProcessState> batch)
+        {
+            foreach (var bottle in batch)
+            {
+                SnapBottleToFillingSlot(bottle);
+            }
+        }
+
+        private void SetFillingFlowVisuals(List<Transform> activeNozzles, bool active)
+        {
+            foreach (var nozzle in activeNozzles)
+            {
+                if (nozzle == null)
+                {
+                    continue;
+                }
+
+                var children = nozzle.GetComponentsInChildren<Transform>(true);
+                foreach (var child in children)
+                {
+                    if (child != null && child.name.StartsWith("Liquid Flow Visual"))
+                    {
+                        child.gameObject.SetActive(active);
+                    }
+                }
+            }
         }
 
         private void AssignCappingSlot(BottleProcessState bottle)
@@ -1034,7 +1204,7 @@ namespace ConveyorTwin
             for (var i = 0; i < activeHeads.Count; i++)
             {
                 basePositions[i] = activeHeads[i].position;
-                downPositions[i] = basePositions[i] + Vector3.down * 0.22f;
+                downPositions[i] = basePositions[i] + Vector3.down * 0.34f;
             }
 
             yield return MoveCappingHeads(activeHeads, basePositions, downPositions, 0.18f);
