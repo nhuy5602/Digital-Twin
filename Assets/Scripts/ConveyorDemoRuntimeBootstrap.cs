@@ -47,6 +47,7 @@ namespace ConveyorTwin
             var bottleMaterial = CreateMaterial(new Color(0.82f, 0.95f, 1f, 0.35f));
             var waterMaterial = CreateMaterial(new Color(0.1f, 0.55f, 1f, 0.85f));
             var capMaterial = CreateMaterial(new Color(0.96f, 0.96f, 0.92f));
+            var capTubeMaterial = CreateMaterial(new Color(0.65f, 0.9f, 1f, 0.28f));
             var sensorMaterial = CreateMaterial(new Color(0.1f, 0.75f, 1f));
             var rejectMaterial = CreateMaterial(new Color(1f, 0.35f, 0.22f));
             var acceptMaterial = CreateMaterial(new Color(0.25f, 0.9f, 0.35f));
@@ -61,7 +62,7 @@ namespace ConveyorTwin
             var fillingStopGate = CreateFillingStopGate(root.transform, metalMaterial, rejectMaterial);
             var starWheel = CreateFillingStarWheel(root.transform, starWheelMaterial, metalMaterial, beltMaterial);
             var qcBeam = CreateQcSensor(root.transform, sensorMaterial, metalMaterial);
-            var cappingHeads = CreateCappingStation(root.transform, metalMaterial, capMaterial);
+            var cappingStation = CreateCappingStation(root.transform, metalMaterial, capMaterial, capTubeMaterial, sensorMaterial);
             var pusher = CreatePusher(root.transform, metalMaterial, rejectMaterial);
             var acceptChute = CreateChute(root.transform, "Accept Chute", new Vector3(0.95f, 0.28f, 3.95f), acceptMaterial, 18f);
             var rejectChute = CreateChute(root.transform, "Reject Chute", new Vector3(-1.15f, 0.35f, 1.25f), rejectMaterial, -25f);
@@ -81,8 +82,11 @@ namespace ConveyorTwin
             process.liquidVessel = vesselParts.vessel;
             process.vesselLiquidVisual = vesselParts.liquid;
             process.qcSensorBeam = qcBeam;
-            process.cappingHead = cappingHeads.Count > 0 ? cappingHeads[0] : null;
-            process.cappingHeads = cappingHeads;
+            process.cappingHead = cappingStation.heads.Count > 0 ? cappingStation.heads[0] : null;
+            process.cappingHeads = cappingStation.heads;
+            process.capDropper = cappingStation.dropper;
+            process.capSensorBeam = cappingStation.sensor;
+            process.capMagazineCaps = cappingStation.magazineCaps;
             process.pneumaticPusher = pusher;
             process.acceptChute = acceptChute;
             process.rejectChute = rejectChute;
@@ -97,11 +101,15 @@ namespace ConveyorTwin
             process.qcZ = 0.65f;
             process.pusherZ = 1.15f;
             process.cappingZ = CappingFirstZ;
-            process.cappingHeadCount = 4;
+            process.cappingHeadCount = 1;
             process.cappingFirstZ = CappingFirstZ;
             process.cappingPitchM = CappingPitch;
             process.cappingQueueStopZ = 1.45f;
-            process.cappingTimeSeconds = 0.75f;
+            process.capDropZ = 1.36f;
+            process.capTightenZ = 1.78f;
+            process.capperMoveSeconds = 0.14f;
+            process.capperStrokeM = 0.2f;
+            process.cappingTimeSeconds = 0.35f;
             process.acceptEndZ = 3.75f;
             process.starWheelPocketCount = FillingStarWheelPocketCount;
             process.starWheelCenter = FillingStarWheelBottleCenter;
@@ -166,6 +174,25 @@ namespace ConveyorTwin
             else if (material.HasProperty("_Color"))
             {
                 material.SetColor("_Color", color);
+            }
+
+            if (color.a < 0.99f)
+            {
+                if (material.HasProperty("_Surface"))
+                {
+                    material.SetFloat("_Surface", 1f);
+                }
+
+                if (material.HasProperty("_Blend"))
+                {
+                    material.SetFloat("_Blend", 0f);
+                }
+
+                material.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
+                material.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+                material.SetInt("_ZWrite", 0);
+                material.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+                material.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
             }
 
             return material;
@@ -396,8 +423,8 @@ namespace ConveyorTwin
             var cap = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             cap.name = "Bottle Cap";
             cap.transform.SetParent(bottleRoot.transform);
-            cap.transform.localPosition = new Vector3(0f, 0.72f, 0f);
-            cap.transform.localScale = new Vector3(0.11f, 0.055f, 0.11f);
+            cap.transform.localPosition = new Vector3(0f, 0.66f, 0f);
+            cap.transform.localScale = new Vector3(0.105f, 0.045f, 0.105f);
             cap.GetComponent<Renderer>().sharedMaterial = capMaterial;
             cap.SetActive(false);
 
@@ -561,42 +588,65 @@ namespace ConveyorTwin
             return mesh;
         }
 
-        private List<Transform> CreateCappingStation(Transform parent, Material metalMaterial, Material capMaterial)
+        private (List<Transform> heads, Transform dropper, Transform sensor, List<Transform> magazineCaps) CreateCappingStation(Transform parent, Material metalMaterial, Material capMaterial, Material capTubeMaterial, Material sensorMaterial)
         {
             var heads = new List<Transform>();
-            const int headCount = 4;
+            var magazineCaps = new List<Transform>();
             var centerZ = CappingFirstZ + CappingPitch * 1.5f;
+            const float capDropZ = 1.36f;
+            const float capTightenZ = 1.78f;
+            const float capMagazineX = 0f;
 
             CreateCube(parent, "Capping Station Frame Left", new Vector3(-0.42f, 1.24f, centerZ), new Vector3(0.08f, 0.9f, 1.9f), metalMaterial);
             CreateCube(parent, "Capping Station Frame Right", new Vector3(0.42f, 1.24f, centerZ), new Vector3(0.08f, 0.9f, 1.9f), metalMaterial);
-            CreateCube(parent, "Capping Head Rail", new Vector3(0f, 1.48f, centerZ), new Vector3(0.72f, 0.08f, 1.85f), metalMaterial);
 
-            for (var i = 0; i < headCount; i++)
+            var capTube = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            capTube.name = "Transparent Cap Magazine Tube";
+            capTube.transform.SetParent(parent);
+            capTube.transform.position = new Vector3(capMagazineX, 1.9f, capDropZ);
+            capTube.transform.localScale = new Vector3(0.16f, 0.42f, 0.16f);
+            capTube.GetComponent<Renderer>().sharedMaterial = capTubeMaterial;
+
+            for (var i = 0; i < 5; i++)
             {
-                var stationPosition = CappingSlotPosition(i, 0f);
-                var headAssembly = new GameObject($"Capping Head Assembly {i + 1}");
-                headAssembly.transform.SetParent(parent);
-                headAssembly.transform.position = Vector3.zero;
-
-                CreateCube(headAssembly.transform, $"Capping Spring {i + 1}", new Vector3(stationPosition.x, 1.88f, stationPosition.z), new Vector3(0.08f, 0.22f, 0.08f), metalMaterial);
-
-                var head = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-                head.name = $"Capping Head {i + 1}";
-                head.transform.SetParent(headAssembly.transform);
-                head.transform.position = new Vector3(stationPosition.x, 1.66f, stationPosition.z);
-                head.transform.localScale = new Vector3(0.11f, 0.16f, 0.11f);
-                head.GetComponent<Renderer>().sharedMaterial = metalMaterial;
-
-                var capReady = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-                capReady.name = $"Queued Cap {i + 1}";
-                capReady.transform.SetParent(headAssembly.transform);
-                capReady.transform.position = new Vector3(stationPosition.x, 1.49f, stationPosition.z);
-                capReady.transform.localScale = new Vector3(0.095f, 0.022f, 0.095f);
-                capReady.GetComponent<Renderer>().sharedMaterial = capMaterial;
-
-                CreateCube(parent, $"Capping Bottle Stop {i + 1}", new Vector3(-0.22f, 0.78f, stationPosition.z), new Vector3(0.07f, 0.18f, 0.12f), metalMaterial);
-                heads.Add(headAssembly.transform);
+                var capInTube = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                capInTube.name = $"Cap Magazine Tube Cap {i + 1}";
+                capInTube.transform.SetParent(parent);
+                capInTube.transform.position = new Vector3(capMagazineX, 1.57f + i * 0.13f, capDropZ);
+                capInTube.transform.localScale = new Vector3(0.105f, 0.018f, 0.105f);
+                capInTube.GetComponent<Renderer>().sharedMaterial = capMaterial;
+                magazineCaps.Add(capInTube.transform);
             }
+
+            var sensor = CreateCube(parent, "Cap Drop Sensor Beam", new Vector3(0f, 0.92f, capDropZ), new Vector3(0.86f, 0.035f, 0.035f), sensorMaterial).transform;
+            CreateCube(parent, "Cap Drop Sensor Left", new Vector3(-0.46f, 0.95f, capDropZ), new Vector3(0.12f, 0.28f, 0.12f), metalMaterial);
+            CreateCube(parent, "Cap Drop Sensor Right", new Vector3(0.46f, 0.95f, capDropZ), new Vector3(0.12f, 0.28f, 0.12f), metalMaterial);
+
+            var tightenerMotor = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            tightenerMotor.name = "Rotary Cap Tightener Fixed Motor";
+            tightenerMotor.transform.SetParent(parent);
+            tightenerMotor.transform.position = new Vector3(0f, 1.88f, capTightenZ);
+            tightenerMotor.transform.localScale = new Vector3(0.16f, 0.28f, 0.16f);
+            tightenerMotor.GetComponent<Renderer>().sharedMaterial = metalMaterial;
+
+            var tightenerTool = new GameObject("Rotary Cap Tightener Moving Tool");
+            tightenerTool.transform.SetParent(parent);
+            tightenerTool.transform.position = new Vector3(0f, 1.86f, capTightenZ);
+
+            var driveBlock = CreateCube(tightenerTool.transform, "Rotary Cap Tightener Drive Block", Vector3.zero, new Vector3(0.38f, 0.16f, 0.38f), metalMaterial);
+            driveBlock.transform.localPosition = new Vector3(0f, -0.06f, 0f);
+            var rotationMarker = CreateCube(tightenerTool.transform, "Rotary Cap Tightener Rotation Marker", Vector3.zero, new Vector3(0.08f, 0.04f, 0.16f), sensorMaterial);
+            rotationMarker.transform.localPosition = new Vector3(0.19f, 0.04f, 0f);
+
+            var tightenerHead = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            tightenerHead.name = "Rotary Cap Tightener Head";
+            tightenerHead.transform.SetParent(tightenerTool.transform);
+            tightenerHead.transform.localPosition = new Vector3(0f, -0.12f, 0f);
+            tightenerHead.transform.localScale = new Vector3(0.1f, 0.09f, 0.1f);
+            tightenerHead.GetComponent<Renderer>().sharedMaterial = metalMaterial;
+            heads.Add(tightenerTool.transform);
+
+            CreateCube(parent, "Cap Tightener Bottle Stop", new Vector3(-0.22f, 0.78f, capTightenZ), new Vector3(0.07f, 0.18f, 0.12f), metalMaterial);
 
             var capFeed = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             capFeed.name = "Cap Feeder Bowl";
@@ -607,7 +657,7 @@ namespace ConveyorTwin
 
             CreateCube(parent, "Cap Feed Rail", new Vector3(0.4f, 1.28f, centerZ), new Vector3(0.75f, 0.04f, 1.75f), metalMaterial);
 
-            return heads;
+            return (heads, null, sensor, magazineCaps);
         }
 
         private GameObject CreateCube(Transform parent, string name, Vector3 position, Vector3 scale, Material material)

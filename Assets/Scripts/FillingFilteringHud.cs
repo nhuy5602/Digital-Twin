@@ -53,7 +53,7 @@ namespace ConveyorTwin
             DrawLine($"   Vessel liquid level: {process.LiquidLevelLiters:0.0} L");
             DrawLine($"   Filling time: {process.LastFillingTimeSeconds:0.00} s");
             DrawLine($"3. Inspection status: {process.InspectionStatus}");
-            DrawLine($"   Capping indexed: {process.BottlesAtCappingStation}/{process.ActiveCappingHeadCount} | Conveyor stopped: {process.ConveyorStoppedForCapping}");
+            DrawLine($"   Capping machine busy: {process.CappingActive} | Conveyor stopped: {process.ConveyorStoppedForCapping}");
             DrawLine($"4. Total passed: {process.TotalPassed}");
             DrawLine($"   Total rejected: {process.TotalRejected}");
             DrawLine($"Rule: volume >= 95% => PASSED, otherwise REJECTED");

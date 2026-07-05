@@ -24,6 +24,7 @@ namespace ConveyorTwin
         public bool isDefective;
         public bool fillingCompleted;
         public bool inspectionCompleted;
+        public bool capPlaced;
         public bool cappingCompleted;
         public bool counted;
         public Vector2 turntableVelocity;
@@ -64,11 +65,11 @@ namespace ConveyorTwin
             if (liquidVisual != null)
             {
                 var scale = liquidVisual.localScale;
-                scale.y = Mathf.Lerp(0.02f, 0.72f, liquidVolume01);
+                scale.y = Mathf.Lerp(0.02f, 0.38f, liquidVolume01);
                 liquidVisual.localScale = scale;
 
                 var localPosition = liquidVisual.localPosition;
-                localPosition.y = Mathf.Lerp(-0.33f, 0.02f, liquidVolume01);
+                localPosition.y = Mathf.Lerp(-0.30f, -0.04f, liquidVolume01);
                 liquidVisual.localPosition = localPosition;
             }
 
@@ -100,7 +101,7 @@ namespace ConveyorTwin
 
             if (capVisual != null)
             {
-                capVisual.gameObject.SetActive(cappingCompleted || status == BottleQualityStatus.Capped || status == BottleQualityStatus.AcceptedBin);
+                capVisual.gameObject.SetActive(capPlaced || cappingCompleted || status == BottleQualityStatus.Capped || status == BottleQualityStatus.AcceptedBin);
                 var rendererToTint = capRenderer;
                 if (rendererToTint == null)
                 {
