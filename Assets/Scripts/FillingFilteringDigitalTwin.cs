@@ -187,7 +187,7 @@ namespace ConveyorTwin
             BottlesOnConveyorCount = lineBottles.Count;
             BottlesAtFillingStation = fillingSlotAssignments.Count;
             BottlesAtCappingStation = cappingBottles.Count;
-            ConveyorStoppedForFilling = fillingStationBusy || fillingCaptureBusy || StarWheelIndexing;
+            ConveyorStoppedForFilling = fillingCaptureBusy || StarWheelIndexing;
             ConveyorStoppedForCapping = cappingStationBusy;
             StarWheelLocked = fillingStationBusy || fillingCaptureBusy || StarWheelIndexing;
             CappingActive = cappingStationBusy;
@@ -574,12 +574,6 @@ namespace ConveyorTwin
                     continue;
                 }
 
-                if (IsConveyorStopped())
-                {
-                    bottle.transform.position = position;
-                    continue;
-                }
-
                 position.x = lineX;
 
                 if (!bottle.fillingCompleted)
@@ -683,7 +677,7 @@ namespace ConveyorTwin
 
         private bool IsConveyorStopped()
         {
-            return fillingStationBusy || fillingCaptureBusy || cappingStationBusy || StarWheelIndexing;
+            return fillingCaptureBusy || StarWheelIndexing;
         }
 
         private bool IsLineStartBlocked()

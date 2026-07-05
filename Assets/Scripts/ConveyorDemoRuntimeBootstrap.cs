@@ -210,7 +210,15 @@ namespace ConveyorTwin
 
         private void CreateConveyor(Transform parent, Material beltMaterial, Material metalMaterial, Material slatMaterial, Material ribMaterial)
         {
-            CreateCube(parent, "Slat Chain Conveyor Base", new Vector3(0f, 0.38f, 0.55f), new Vector3(0.52f, 0.08f, 10.7f), beltMaterial);
+            const float splitGapCenterZ = 0.42f;
+            const float splitGapHalfLength = 0.16f;
+            const float firstSegmentStartZ = -4.8f;
+            const float firstSegmentEndZ = splitGapCenterZ - splitGapHalfLength;
+            const float secondSegmentStartZ = splitGapCenterZ + splitGapHalfLength;
+            const float secondSegmentEndZ = 5.9f;
+
+            CreateConveyorSegment(parent, "Filling Slat Chain Conveyor", firstSegmentStartZ, firstSegmentEndZ, beltMaterial, metalMaterial);
+            CreateConveyorSegment(parent, "Capping Slat Chain Conveyor", secondSegmentStartZ, secondSegmentEndZ, beltMaterial, metalMaterial);
 
             const float pitch = 0.22f;
             const float slatLength = 0.17f;
@@ -219,6 +227,11 @@ namespace ConveyorTwin
             for (var i = 0; i < slatCount; i++)
             {
                 var z = startZ + i * pitch;
+                if (z > firstSegmentEndZ && z < secondSegmentStartZ)
+                {
+                    continue;
+                }
+
                 CreateCube(parent, "Modular Slat Plate", new Vector3(0f, 0.46f, z), new Vector3(0.46f, 0.035f, slatLength), slatMaterial);
                 CreateCube(parent, "Slat Gap Shadow", new Vector3(0f, 0.482f, z + slatLength * 0.5f + 0.017f), new Vector3(0.47f, 0.012f, 0.028f), beltMaterial);
 
@@ -227,10 +240,17 @@ namespace ConveyorTwin
                     CreateCube(parent, "Anti Slip Cross Rib", new Vector3(0f, 0.515f, z - 0.055f), new Vector3(0.42f, 0.026f, 0.022f), ribMaterial);
                 }
             }
+        }
 
-            CreateCube(parent, "Left Narrow Guide Rail", new Vector3(-0.28f, 0.74f, 0.55f), new Vector3(0.035f, 0.1f, 10.7f), metalMaterial);
-            CreateCube(parent, "Right Narrow Guide Rail", new Vector3(0.28f, 0.74f, 0.55f), new Vector3(0.035f, 0.1f, 10.7f), metalMaterial);
-            CreateCube(parent, "Narrow Conveyor Support", new Vector3(0f, 0.2f, 0.55f), new Vector3(0.68f, 0.15f, 10.9f), metalMaterial);
+        private void CreateConveyorSegment(Transform parent, string namePrefix, float startZ, float endZ, Material beltMaterial, Material metalMaterial)
+        {
+            var length = endZ - startZ;
+            var centerZ = (startZ + endZ) * 0.5f;
+
+            CreateCube(parent, $"{namePrefix} Base", new Vector3(0f, 0.38f, centerZ), new Vector3(0.52f, 0.08f, length), beltMaterial);
+            CreateCube(parent, $"{namePrefix} Left Guide Rail", new Vector3(-0.28f, 0.74f, centerZ), new Vector3(0.035f, 0.1f, length), metalMaterial);
+            CreateCube(parent, $"{namePrefix} Right Guide Rail", new Vector3(0.28f, 0.74f, centerZ), new Vector3(0.035f, 0.1f, length), metalMaterial);
+            CreateCube(parent, $"{namePrefix} Support", new Vector3(0f, 0.2f, centerZ), new Vector3(0.68f, 0.15f, length + 0.2f), metalMaterial);
         }
 
         private Transform CreateTurntable(Transform parent, Material material)
