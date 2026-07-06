@@ -97,6 +97,17 @@ namespace ConveyorTwin
         public float outletCaptureRadius = 0.78f;
         public float outletAngleToleranceDegrees = 28f;
 
+        [Header("Neck rail gravity feed")]
+        public float neckRailStartZ = -4.2f;
+        public float neckRailEndZ = -1.1f;
+        public float neckRailStartBottleY = 1.05f;
+        public float neckRailEndBottleY = 0.82f;
+        public float neckRailMinSlideSpeedMps = 0.12f;
+        public float neckRailMaxSlideSpeedMps = 0.95f;
+        public float neckRailGravityAccelerationMps2 = 0.72f;
+        public float airBlowerWindSpeedMps = 0.8f;
+        public float airBlowerAccelerationGain = 0.8f;
+
         [Header("Process settings")]
         [Range(0f, 1f)] public float properFillProbability = 0.9f;
         [Range(0f, 1f)] public float passThreshold = 0.95f;
@@ -141,6 +152,7 @@ namespace ConveyorTwin
         private readonly HashSet<BottleProcessState> outletBottles = new HashSet<BottleProcessState>();
         private readonly Dictionary<BottleProcessState, int> fillingSlotAssignments = new Dictionary<BottleProcessState, int>();
         private readonly Dictionary<BottleProcessState, int> cappingSlotAssignments = new Dictionary<BottleProcessState, int>();
+        private readonly Dictionary<BottleProcessState, float> neckRailSlideSpeeds = new Dictionary<BottleProcessState, float>();
         private int completedCount;
         private float spawnTimer;
         private float releaseTimer;
@@ -323,6 +335,7 @@ namespace ConveyorTwin
             bottle.cappingCompleted = false;
             bottle.counted = false;
             bottle.turntableVelocity = Vector2.zero;
+            neckRailSlideSpeeds.Remove(bottle);
             bottles.Add(bottle);
         }
 
@@ -574,13 +587,27 @@ namespace ConveyorTwin
                     continue;
                 }
 
-                if (IsConveyorStopped())
+                position.x = lineX;
+
+                var canUseNeckRail = !bottle.fillingCompleted &&
+                    !fillingSlotAssignments.ContainsKey(bottle) &&
+                    position.z >= neckRailStartZ &&
+                    position.z < FillingEntryZ;
+                if (!canUseNeckRail && IsConveyorStopped())
                 {
                     bottle.transform.position = position;
                     continue;
                 }
 
-                position.x = lineX;
+                if (canUseNeckRail)
+                {
+                    position = MoveBottleAlongInfeedNeckRail(bottle, position);
+                    if (position.z < FillingEntryZ)
+                    {
+                        bottle.transform.position = position;
+                        continue;
+                    }
+                }
 
                 if (!bottle.fillingCompleted)
                 {
@@ -593,6 +620,7 @@ namespace ConveyorTwin
                         }
 
                         position.z = KeepBottleSpacing(bottle, Mathf.Min(position.z, fillingQueueStopZ));
+                        position.y = NeckRailBottleYAtZ(position.z);
                         bottle.transform.position = position;
                         continue;
                     }
@@ -642,6 +670,32 @@ namespace ConveyorTwin
                 position.z = KeepBottleSpacing(bottle, position.z);
                 bottle.transform.position = position;
             }
+        }
+
+        private Vector3 MoveBottleAlongInfeedNeckRail(BottleProcessState bottle, Vector3 position)
+        {
+            if (!neckRailSlideSpeeds.TryGetValue(bottle, out var slideSpeed))
+            {
+                slideSpeed = neckRailMinSlideSpeedMps;
+            }
+
+            var windSpeed = Mathf.Max(0f, airBlowerWindSpeedMps);
+            var targetSpeed = Mathf.Clamp(neckRailMinSlideSpeedMps + windSpeed, neckRailMinSlideSpeedMps, neckRailMaxSlideSpeedMps);
+            var acceleration = neckRailGravityAccelerationMps2 + windSpeed * airBlowerAccelerationGain;
+            slideSpeed = Mathf.MoveTowards(slideSpeed, targetSpeed, acceleration * Time.deltaTime);
+            neckRailSlideSpeeds[bottle] = slideSpeed;
+
+            var nextZ = Mathf.Min(FillingEntryZ, position.z + slideSpeed * Time.deltaTime);
+            position.z = KeepBottleSpacing(bottle, nextZ);
+            position.y = NeckRailBottleYAtZ(position.z);
+            position.x = lineX;
+            return position;
+        }
+
+        private float NeckRailBottleYAtZ(float z)
+        {
+            var railRatio = Mathf.InverseLerp(neckRailStartZ, neckRailEndZ, z);
+            return Mathf.Lerp(neckRailStartBottleY, neckRailEndBottleY, railRatio);
         }
 
         private float KeepBottleSpacing(BottleProcessState currentBottle, float candidateZ)
@@ -721,6 +775,7 @@ namespace ConveyorTwin
 
             fillingCaptureBusy = true;
             lineBottles.Remove(bottle);
+            neckRailSlideSpeeds.Remove(bottle);
             fillingBottles.Add(bottle);
             bottle.transform.position = StarWheelSlotPosition(0);
 
