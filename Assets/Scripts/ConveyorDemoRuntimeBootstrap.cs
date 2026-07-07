@@ -774,19 +774,19 @@ namespace ConveyorTwin
 
         private void CreateStarWheelOutfeedReleaseGuide(Transform parent, Material metalMaterial, Material beltMaterial)
         {
-            var releasePocket = Mathf.Min(FillingStarWheelPocketCount - 1, FillingStationStartPocketIndex + FillingNozzlePocketOrder.Length + 2);
-            var exitPoint = StarWheelPocketPosition(releasePocket, FillingStarWheelBottleCenter.y);
+            var exitPoint = StarWheelPocketPosition(FillingStarWheelPocketCount - 1, FillingStarWheelBottleCenter.y);
             var conveyorPoint = new Vector3(0f, FillingStarWheelBottleCenter.y, exitPoint.z + 0.22f);
             var center = Vector3.Lerp(exitPoint, conveyorPoint, 0.5f);
             var length = Vector3.Distance(exitPoint, conveyorPoint);
+            var yaw = Mathf.Atan2(conveyorPoint.x - exitPoint.x, conveyorPoint.z - exitPoint.z) * Mathf.Rad2Deg;
 
             var plate = CreateCube(parent, "Star Wheel Exit Release Plate", new Vector3(center.x, 0.49f, center.z), new Vector3(0.32f, 0.035f, length), beltMaterial);
-            plate.transform.rotation = Quaternion.Euler(0f, 28f, 0f);
+            plate.transform.rotation = Quaternion.Euler(0f, yaw, 0f);
 
             var leftRail = CreateCube(parent, "Star Wheel Exit Left Guide Rail", center + new Vector3(0.08f, 0.22f, -0.13f), new Vector3(0.035f, 0.08f, length), metalMaterial);
-            leftRail.transform.rotation = Quaternion.Euler(0f, 28f, 0f);
+            leftRail.transform.rotation = Quaternion.Euler(0f, yaw, 0f);
             var rightRail = CreateCube(parent, "Star Wheel Exit Right Guide Rail", center + new Vector3(-0.08f, 0.22f, 0.13f), new Vector3(0.035f, 0.08f, length), metalMaterial);
-            rightRail.transform.rotation = Quaternion.Euler(0f, 28f, 0f);
+            rightRail.transform.rotation = Quaternion.Euler(0f, yaw, 0f);
         }
 
         private void CreateFixedStarWheelBarrier(Transform parent, Material material)

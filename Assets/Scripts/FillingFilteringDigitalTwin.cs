@@ -142,6 +142,7 @@ namespace ConveyorTwin
         public bool TurntablePaused { get; private set; }
         public bool StarWheelLocked { get; private set; }
         public bool StarWheelIndexing { get; private set; }
+        public string StarWheelPhase { get; private set; } = "Waiting for infeed";
         public float StarWheelStepAngleDegrees => 360f / Mathf.Max(1, starWheelPocketCount);
         public float StarWheelPocketPitchM => Mathf.PI * 2f * starWheelPocketRadius / Mathf.Max(1, starWheelPocketCount);
         public int FillingStationEndPocketIndex => fillingStationStartPocketIndex + ActiveFillingNozzleCount - 1;
@@ -216,11 +217,12 @@ namespace ConveyorTwin
             ThroughputBottlesPerHour = completedCount / Mathf.Max(Time.time / 3600f, 0.0001f);
             TurntableBufferCount = turntableBottles.Count;
             BottlesOnConveyorCount = lineBottles.Count;
-            BottlesAtFillingStation = fillingSlotAssignments.Count;
+            BottlesAtFillingStation = CountUnfilledBottlesInFillingWindow();
             BottlesAtCappingStation = cappingBottles.Count;
-            ConveyorStoppedForFilling = false;
-            ConveyorStoppedForCapping = false;
-            StarWheelLocked = false;
+            ConveyorStoppedForFilling = fillingStationBusy;
+            ConveyorStoppedForCapping = cappingStationBusy;
+            StarWheelLocked = fillingStationBusy || fillingCaptureBusy || StarWheelIndexing || cappingStationBusy;
+            StarWheelPhase = DetermineStarWheelPhase();
             CappingActive = cappingStationBusy;
         }
 
@@ -923,6 +925,72 @@ namespace ConveyorTwin
         private bool CanIndexStarWheel()
         {
             return !fillingStationBusy && !fillingCaptureBusy && !StarWheelIndexing && fillingSlotAssignments.Count > 0;
+        }
+
+        private int CountUnfilledBottlesInFillingWindow()
+        {
+            var count = 0;
+            foreach (var entry in fillingSlotAssignments)
+            {
+                var bottle = entry.Key;
+                if (bottle != null &&
+                    !bottle.fillingCompleted &&
+                    entry.Value >= fillingStationStartPocketIndex &&
+                    entry.Value <= FillingStationEndPocketIndex)
+                {
+                    count++;
+                }
+            }
+
+            return count;
+        }
+
+        private string DetermineStarWheelPhase()
+        {
+            if (fillingStationBusy)
+            {
+                return "STOPPED - filling bottles";
+            }
+
+            if (cappingStationBusy)
+            {
+                return "STOPPED - capping in star wheel";
+            }
+
+            if (StarWheelIndexing)
+            {
+                return "INDEXING pockets";
+            }
+
+            if (GetReadyFillingBatch().Count >= ActiveFillingNozzleCount)
+            {
+                return "READY - starting fill dwell";
+            }
+
+            if (CountUnfilledBottlesInFillingWindow() > 0)
+            {
+                return "LOADING fill pockets";
+            }
+
+            foreach (var entry in fillingSlotAssignments)
+            {
+                if (entry.Key == null)
+                {
+                    continue;
+                }
+
+                if (entry.Key.cappingCompleted && entry.Value >= FillingExitPocketIndex)
+                {
+                    return "RELEASING to QC conveyor";
+                }
+
+                if (entry.Key.fillingCompleted)
+                {
+                    return "MOVING to capper/exit";
+                }
+            }
+
+            return "Waiting for infeed";
         }
 
         private void RecoverStarWheelLocks()
