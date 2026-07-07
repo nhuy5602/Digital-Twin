@@ -1169,7 +1169,7 @@ namespace ConveyorTwin
         private IEnumerator ApplyStarWheelPocketOperations()
         {
             var operations = new List<KeyValuePair<BottleProcessState, int>>(fillingSlotAssignments);
-            var cappingTargets = new List<BottleProcessState>();
+            var cappingTargets = new List<KeyValuePair<BottleProcessState, int>>();
             operations.Sort((left, right) => left.Value.CompareTo(right.Value));
             foreach (var entry in operations)
             {
@@ -1185,15 +1185,26 @@ namespace ConveyorTwin
                     yield return DropCapOnBottle(bottle);
                 }
 
-                if (pocketIndex >= cappingPocketStartIndex && bottle.capPlaced && !bottle.cappingCompleted)
+                if (pocketIndex >= cappingPocketStartIndex &&
+                    pocketIndex <= FillingExitPocketIndex &&
+                    bottle.capPlaced &&
+                    !bottle.cappingCompleted)
                 {
-                    cappingTargets.Add(bottle);
+                    cappingTargets.Add(entry);
                 }
             }
 
-            if (cappingTargets.Count > 0)
+            var requiredCappingBatchSize = Mathf.Min(ActiveFillingNozzleCount, ActiveCappingHeadCount);
+            if (cappingTargets.Count >= requiredCappingBatchSize)
             {
-                yield return TightenCapsInStarWheel(cappingTargets);
+                cappingTargets.Sort((left, right) => left.Value.CompareTo(right.Value));
+                var batch = new List<BottleProcessState>();
+                for (var i = 0; i < requiredCappingBatchSize; i++)
+                {
+                    batch.Add(cappingTargets[i].Key);
+                }
+
+                yield return TightenCapsInStarWheel(batch);
             }
         }
 
@@ -1595,7 +1606,7 @@ namespace ConveyorTwin
             var targetRotation = startRotation * Quaternion.Euler(0f, -slotDelta * StarWheelStepAngleDegrees, 0f);
             starWheelIndex = (starWheelIndex + slotDelta) % Mathf.Max(1, starWheelPocketCount);
             var elapsed = 0f;
-            var duration = Mathf.Max(0.05f, starWheelIndexDurationSeconds);
+            var duration = StarWheelIndexDurationForSlots(slotDelta);
 
             while (elapsed < duration)
             {
@@ -1645,7 +1656,7 @@ namespace ConveyorTwin
             var targetRotation = startRotation * Quaternion.Euler(0f, -slotDelta * StarWheelStepAngleDegrees, 0f);
             starWheelIndex = (starWheelIndex + slotDelta) % Mathf.Max(1, starWheelPocketCount);
             var elapsed = 0f;
-            var duration = Mathf.Max(0.05f, starWheelIndexDurationSeconds);
+            var duration = StarWheelIndexDurationForSlots(slotDelta);
 
             if (allowRailCapture)
             {
@@ -1787,13 +1798,11 @@ namespace ConveyorTwin
                 bottle.RefreshVisuals();
                 ConsumeCapMagazineCap();
             }
+        }
 
-            if (slot >= cappingPocketStartIndex && bottle.capPlaced && !bottle.cappingCompleted)
-            {
-                bottle.cappingCompleted = true;
-                bottle.status = BottleQualityStatus.Capped;
-                bottle.RefreshVisuals();
-            }
+        private float StarWheelIndexDurationForSlots(int slotDelta)
+        {
+            return Mathf.Max(0.05f, starWheelIndexDurationSeconds) * Mathf.Max(1, slotDelta);
         }
 
         private float NextStarWheelReleaseConveyorZ()
