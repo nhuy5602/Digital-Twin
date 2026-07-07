@@ -40,7 +40,7 @@ namespace ConveyorTwin
         private Color passedColor = new Color(0.35f, 1f, 0.55f, 0.45f);
         private Color rejectedColor = new Color(1f, 0.35f, 0.25f, 0.45f);
         private Color liquidColor = new Color(0.1f, 0.55f, 1f, 0.85f);
-        private Color capColor = new Color(0.96f, 0.96f, 0.92f, 1f);
+        private Color capColor = new Color(0.02f, 0.35f, 0.95f, 1f);
 
         public void SetVolume(float volume01)
         {

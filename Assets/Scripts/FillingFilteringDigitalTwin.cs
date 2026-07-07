@@ -1041,29 +1041,8 @@ namespace ConveyorTwin
 
         private IEnumerator ApplyStarWheelPocketOperations()
         {
-            var operations = new List<KeyValuePair<BottleProcessState, int>>(fillingSlotAssignments);
-            operations.Sort((left, right) => left.Value.CompareTo(right.Value));
-            foreach (var entry in operations)
-            {
-                var bottle = entry.Key;
-                var pocketIndex = entry.Value;
-                if (bottle == null || !bottle.fillingCompleted)
-                {
-                    continue;
-                }
-
-                if (pocketIndex >= capDropPocketIndex && !bottle.capPlaced)
-                {
-                    yield return DropCapOnBottle(bottle);
-                }
-
-                if (pocketIndex >= cappingPocketStartIndex && bottle.capPlaced && !bottle.cappingCompleted)
-                {
-                    bottle.cappingCompleted = true;
-                    bottle.status = BottleQualityStatus.Capped;
-                    bottle.RefreshVisuals();
-                }
-            }
+            // Bottles leave the star wheel after filling; cap drop and tightening happen after QC on the straight conveyor.
+            yield break;
         }
 
         private void TryStartFillingBatch()
@@ -1617,7 +1596,7 @@ namespace ConveyorTwin
 
                 var currentSlot = Mathf.Lerp(entry.Value, targetSlot, ratio);
                 ApplyStarWheelOperationAtSlot(bottle, currentSlot);
-                if (currentSlot >= releaseThresholdSlot && bottle.cappingCompleted)
+                if (currentSlot >= releaseThresholdSlot && bottle.fillingCompleted)
                 {
                     bottlesToRelease.Add(bottle);
                 }
@@ -1640,19 +1619,7 @@ namespace ConveyorTwin
                 return;
             }
 
-            if (slot >= capDropPocketIndex && !bottle.capPlaced)
-            {
-                bottle.capPlaced = true;
-                bottle.RefreshVisuals();
-                ConsumeCapMagazineCap();
-            }
-
-            if (slot >= cappingPocketStartIndex && bottle.capPlaced && !bottle.cappingCompleted)
-            {
-                bottle.cappingCompleted = true;
-                bottle.status = BottleQualityStatus.Capped;
-                bottle.RefreshVisuals();
-            }
+            // Capping is handled after QC on the straight conveyor, so the star wheel only fills and releases bottles.
         }
 
         private float NextStarWheelReleaseConveyorZ()
@@ -1695,7 +1662,7 @@ namespace ConveyorTwin
             var readyToExit = new List<KeyValuePair<BottleProcessState, int>>();
             foreach (var entry in fillingSlotAssignments)
             {
-                if (entry.Key != null && entry.Key.cappingCompleted && entry.Value >= FillingExitPocketIndex)
+                if (entry.Key != null && entry.Key.fillingCompleted && entry.Value >= FillingExitPocketIndex)
                 {
                     readyToExit.Add(entry);
                 }
