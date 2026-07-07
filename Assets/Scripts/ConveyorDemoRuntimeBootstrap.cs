@@ -133,10 +133,10 @@ namespace ConveyorTwin
             process.starWheelPocketRadius = FillingStarWheelBottleRadius;
             process.starWheelEntryAngleDegrees = FillingStarWheelEntryAngleDegrees;
             process.fillingStationStartPocketIndex = FillingStationStartPocketIndex;
-            process.starWheelIndexStepPockets = 1;
+            process.starWheelIndexStepPockets = 3;
             process.capDropPocketIndex = CapDropPocketIndex;
             process.cappingPocketStartIndex = CappingPocketStartIndex;
-            process.starWheelIndexDurationSeconds = 0.28f;
+            process.starWheelIndexDurationSeconds = 0.9f;
             process.starWheelContinuousSpeedRpm = 7.5f;
             process.infeedMotorSpeedRpm = 18f;
             process.fillingTimeSeconds = 1.35f;
@@ -774,7 +774,8 @@ namespace ConveyorTwin
 
         private void CreateStarWheelOutfeedReleaseGuide(Transform parent, Material metalMaterial, Material beltMaterial)
         {
-            var exitPoint = StarWheelPocketPosition(FillingStarWheelPocketCount - 1, FillingStarWheelBottleCenter.y);
+            var releasePocket = Mathf.Min(FillingStarWheelPocketCount - 1, FillingStationStartPocketIndex + FillingNozzlePocketOrder.Length + 2);
+            var exitPoint = StarWheelPocketPosition(releasePocket, FillingStarWheelBottleCenter.y);
             var conveyorPoint = new Vector3(0f, FillingStarWheelBottleCenter.y, exitPoint.z + 0.22f);
             var center = Vector3.Lerp(exitPoint, conveyorPoint, 0.5f);
             var length = Vector3.Distance(exitPoint, conveyorPoint);
@@ -893,6 +894,18 @@ namespace ConveyorTwin
 
             CreateCube(parent, "Cap Drop Station Frame", new Vector3(capDropPosition.x, 1.25f, capDropPosition.z + 0.28f), new Vector3(0.08f, 0.9f, 0.08f), metalMaterial);
 
+            var dropperTool = new GameObject("Star Wheel Cap Dropper Moving Tool");
+            dropperTool.transform.SetParent(parent);
+            dropperTool.transform.position = new Vector3(capDropPosition.x, 1.28f, capDropPosition.z);
+            var slideBlock = CreateCube(dropperTool.transform, "Cap Dropper Slide Block", dropperTool.transform.position, new Vector3(0.22f, 0.1f, 0.22f), metalMaterial);
+            slideBlock.transform.localPosition = Vector3.zero;
+            var dropperNozzle = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            dropperNozzle.name = "Cap Dropper Pick Tube";
+            dropperNozzle.transform.SetParent(dropperTool.transform);
+            dropperNozzle.transform.localPosition = new Vector3(0f, -0.12f, 0f);
+            dropperNozzle.transform.localScale = new Vector3(0.065f, 0.16f, 0.065f);
+            dropperNozzle.GetComponent<Renderer>().sharedMaterial = metalMaterial;
+
             var capTube = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             capTube.name = "Transparent Cap Magazine Tube";
             capTube.transform.SetParent(parent);
@@ -942,7 +955,7 @@ namespace ConveyorTwin
                 heads.Add(tightenerTool.transform);
             }
 
-            return (heads, null, sensor, magazineCaps);
+            return (heads, dropperTool.transform, sensor, magazineCaps);
         }
 
         private void CreateVideoStyleMachineDetails(Transform parent, Material metalMaterial, Material clearGuardMaterial, Material panelMaterial, Material hoseMaterial, Material capMaterial, Material sensorMaterial, Material rejectMaterial, Material curtainMaterial)
