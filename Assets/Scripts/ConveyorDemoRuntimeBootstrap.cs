@@ -1110,7 +1110,7 @@ namespace ConveyorTwin
             camera.transform.rotation = Quaternion.Euler(29f, -32f, 0f);
             camera.fieldOfView = 58f;
 
-            var light = FindFirstObjectByType<Light>();
+            var light = FindAnyObjectByType<Light>();
             if (light == null)
             {
                 var lightObject = new GameObject("Directional Light");
