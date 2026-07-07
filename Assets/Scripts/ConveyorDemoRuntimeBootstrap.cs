@@ -55,11 +55,16 @@ namespace ConveyorTwin
             var starWheelMaterial = CreateMaterial(new Color(0.86f, 0.86f, 0.82f));
             var bottleMaterial = CreateMaterial(new Color(0.82f, 0.95f, 1f, 0.35f));
             var waterMaterial = CreateMaterial(new Color(0.1f, 0.55f, 1f, 0.85f));
-            var capMaterial = CreateMaterial(new Color(0.96f, 0.96f, 0.92f));
+            var capMaterial = CreateMaterial(new Color(0.02f, 0.35f, 0.95f));
+            var labelMaterial = CreateMaterial(new Color(0.02f, 0.28f, 0.75f));
             var capTubeMaterial = CreateMaterial(new Color(0.65f, 0.9f, 1f, 0.28f));
             var sensorMaterial = CreateMaterial(new Color(0.1f, 0.75f, 1f));
             var rejectMaterial = CreateMaterial(new Color(1f, 0.35f, 0.22f));
             var acceptMaterial = CreateMaterial(new Color(0.25f, 0.9f, 0.35f));
+            var clearGuardMaterial = CreateMaterial(new Color(0.78f, 0.95f, 1f, 0.22f));
+            var hoseMaterial = CreateMaterial(new Color(0.02f, 0.32f, 0.85f));
+            var panelMaterial = CreateMaterial(new Color(0.12f, 0.14f, 0.14f));
+            var curtainMaterial = CreateMaterial(new Color(0.96f, 0.96f, 0.9f, 0.45f));
 
             CreateFloor(root.transform, floorMaterial);
             CreateConveyor(root.transform, beltMaterial, metalMaterial, slatMaterial, ribMaterial, sensorMaterial);
@@ -76,7 +81,9 @@ namespace ConveyorTwin
             var pusher = CreatePusher(root.transform, metalMaterial, rejectMaterial);
             var acceptChute = CreateChute(root.transform, "Accept Chute", new Vector3(0.95f, 0.28f, 3.95f), acceptMaterial, 18f);
             var rejectChute = CreateChute(root.transform, "Reject Chute", new Vector3(-1.15f, 0.35f, 1.25f), rejectMaterial, -25f);
-            var bottleTemplate = CreateBottleTemplate(root.transform, bottleMaterial, waterMaterial, capMaterial);
+            CreateVideoStyleMachineDetails(root.transform, metalMaterial, clearGuardMaterial, panelMaterial, hoseMaterial, capMaterial, sensorMaterial, rejectMaterial, curtainMaterial);
+            CreateFinishedBottleAccumulationTable(root.transform, metalMaterial, bottleMaterial, waterMaterial, capMaterial, labelMaterial);
+            var bottleTemplate = CreateBottleTemplate(root.transform, bottleMaterial, waterMaterial, capMaterial, labelMaterial);
 
             var processObject = new GameObject("Filling Filtering Process Controller");
             processObject.transform.SetParent(root.transform);
@@ -149,7 +156,7 @@ namespace ConveyorTwin
             process.neckRailZ = FillingStarWheelBottleCenter.z;
             process.neckRailStartZ = process.neckRailZ;
             process.neckRailEndZ = process.neckRailZ;
-            process.neckRailStartBottleY = 1.05f;
+            process.neckRailStartBottleY = FillingStarWheelBottleCenter.y;
             process.neckRailEndBottleY = FillingStarWheelBottleCenter.y;
             process.airBlowerWindSpeedMps = 0.8f;
 
@@ -254,9 +261,42 @@ namespace ConveyorTwin
             CreateCube(parent, "Right Narrow Guide Rail", new Vector3(0.28f, 0.74f, 0.55f), new Vector3(0.035f, 0.1f, 10.7f), metalMaterial);
             CreateCube(parent, "Narrow Conveyor Support", new Vector3(0f, 0.2f, 0.55f), new Vector3(0.68f, 0.15f, 10.9f), metalMaterial);
 
+            CreateInfeedTransferConveyor(parent, beltMaterial, metalMaterial, slatMaterial, ribMaterial);
             CreateHorizontalNeckSupportRail(parent, "Infeed Neck Support Rail", InfeedTurntableBottleCenter.x + 0.65f, StarWheelPocketPosition(0, FillingStarWheelBottleCenter.y).x, FillingStarWheelBottleCenter.z, 1.64f, 1.41f, metalMaterial, true, false);
             CreateAirBlower(parent, metalMaterial, sensorMaterial);
             // Outfeed neck support rail is disabled while the star wheel exit rail is being redesigned.
+        }
+
+        private void CreateInfeedTransferConveyor(Transform parent, Material beltMaterial, Material metalMaterial, Material slatMaterial, Material ribMaterial)
+        {
+            var startX = InfeedTurntableBottleCenter.x + 0.72f;
+            var endX = StarWheelPocketPosition(0, FillingStarWheelBottleCenter.y).x + 0.12f;
+            var length = Mathf.Abs(endX - startX);
+            var centerX = (startX + endX) * 0.5f;
+            var z = FillingStarWheelBottleCenter.z;
+
+            var baseBelt = CreateCube(parent, "Infeed Transfer Slat Conveyor Base", new Vector3(centerX, 0.38f, z), new Vector3(0.42f, 0.08f, length), beltMaterial);
+            baseBelt.transform.rotation = Quaternion.Euler(0f, 90f, 0f);
+            var support = CreateCube(parent, "Infeed Transfer Conveyor Support", new Vector3(centerX, 0.2f, z), new Vector3(0.55f, 0.15f, length + 0.18f), metalMaterial);
+            support.transform.rotation = Quaternion.Euler(0f, 90f, 0f);
+
+            const float pitch = 0.2f;
+            var slatCount = Mathf.Max(6, Mathf.CeilToInt(length / pitch));
+            for (var i = 0; i < slatCount; i++)
+            {
+                var ratio = slatCount == 1 ? 0f : i / (float)(slatCount - 1);
+                var x = Mathf.Lerp(startX, endX, ratio);
+                var slat = CreateCube(parent, "Infeed Transfer Modular Slat", new Vector3(x, 0.46f, z), new Vector3(0.15f, 0.035f, 0.36f), slatMaterial);
+                slat.transform.rotation = Quaternion.Euler(0f, 90f, 0f);
+                if (i % 2 == 0)
+                {
+                    var rib = CreateCube(parent, "Infeed Transfer Anti Slip Rib", new Vector3(x, 0.515f, z), new Vector3(0.022f, 0.026f, 0.32f), ribMaterial);
+                    rib.transform.rotation = Quaternion.Euler(0f, 90f, 0f);
+                }
+            }
+
+            CreateCube(parent, "Infeed Transfer Left Guide Rail", new Vector3(centerX, 0.76f, z - 0.19f), new Vector3(0.035f, 0.09f, length), metalMaterial).transform.rotation = Quaternion.Euler(0f, 90f, 0f);
+            CreateCube(parent, "Infeed Transfer Right Guide Rail", new Vector3(centerX, 0.76f, z + 0.19f), new Vector3(0.035f, 0.09f, length), metalMaterial).transform.rotation = Quaternion.Euler(0f, 90f, 0f);
         }
 
         private void CreateHorizontalNeckSupportRail(Transform parent, string namePrefix, float startX, float endX, float z, float startY, float endY, Material material, bool shortenRightRail = false, bool createSupports = true)
@@ -562,7 +602,7 @@ namespace ConveyorTwin
             return chute.transform;
         }
 
-        private BottleProcessState CreateBottleTemplate(Transform parent, Material bottleMaterial, Material waterMaterial, Material capMaterial)
+        private BottleProcessState CreateBottleTemplate(Transform parent, Material bottleMaterial, Material waterMaterial, Material capMaterial, Material labelMaterial)
         {
             var bottleRoot = new GameObject("Bottle Template");
             bottleRoot.transform.SetParent(parent);
@@ -618,6 +658,8 @@ namespace ConveyorTwin
             liquid.transform.localScale = new Vector3(0.14f, 0.02f, 0.14f);
             liquid.GetComponent<Renderer>().sharedMaterial = waterMaterial;
 
+            CreateBottleLabelBand(bottleRoot.transform, labelMaterial);
+
             var state = bottleRoot.AddComponent<BottleProcessState>();
             state.bottleRenderer = body.GetComponent<Renderer>();
             state.liquidRenderer = liquid.GetComponent<Renderer>();
@@ -627,6 +669,23 @@ namespace ConveyorTwin
             state.SetVolume(0f);
             bottleRoot.SetActive(false);
             return state;
+        }
+
+        private void CreateBottleLabelBand(Transform bottleRoot, Material labelMaterial)
+        {
+            const int labelCount = 10;
+            const float radius = 0.185f;
+            for (var i = 0; i < labelCount; i++)
+            {
+                var angle = i * Mathf.PI * 2f / labelCount;
+                var label = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                label.name = "Blue Bottle Label Segment";
+                label.transform.SetParent(bottleRoot, false);
+                label.transform.localPosition = new Vector3(Mathf.Cos(angle) * radius, -0.02f, Mathf.Sin(angle) * radius);
+                label.transform.localScale = new Vector3(0.095f, 0.16f, 0.014f);
+                label.transform.localRotation = Quaternion.Euler(0f, -angle * Mathf.Rad2Deg, 0f);
+                label.GetComponent<Renderer>().sharedMaterial = labelMaterial;
+            }
         }
 
         private void CreateHud(Transform parent, FillingFilteringDigitalTwin process)
@@ -887,6 +946,132 @@ namespace ConveyorTwin
             }
 
             return (heads, null, sensor, magazineCaps);
+        }
+
+        private void CreateVideoStyleMachineDetails(Transform parent, Material metalMaterial, Material clearGuardMaterial, Material panelMaterial, Material hoseMaterial, Material capMaterial, Material sensorMaterial, Material rejectMaterial, Material curtainMaterial)
+        {
+            CreateMachineGuardCabinet(parent, metalMaterial, clearGuardMaterial, curtainMaterial);
+            CreateOperatorControlPanel(parent, metalMaterial, panelMaterial, sensorMaterial, rejectMaterial);
+            CreateCapElevatorBowl(parent, metalMaterial, capMaterial);
+            CreateBluePneumaticHoses(parent, hoseMaterial, metalMaterial);
+            CreateUnderFrameUtilities(parent, metalMaterial, rejectMaterial);
+        }
+
+        private void CreateMachineGuardCabinet(Transform parent, Material metalMaterial, Material clearGuardMaterial, Material curtainMaterial)
+        {
+            var cabinetCenter = new Vector3(FillingStarWheelCenterX + 0.1f, 1.35f, FillingLineZ);
+            CreateCube(parent, "Stainless Guard Cabinet Back Panel", cabinetCenter + new Vector3(0.72f, 0.2f, 0f), new Vector3(0.06f, 1.55f, 2.1f), metalMaterial);
+            CreateCube(parent, "Transparent Guard Door Front", cabinetCenter + new Vector3(-0.65f, 0.2f, 0f), new Vector3(0.045f, 1.35f, 2.0f), clearGuardMaterial);
+            CreateCube(parent, "Stainless Guard Cabinet Top", cabinetCenter + new Vector3(0.05f, 0.96f, 0f), new Vector3(1.55f, 0.08f, 2.18f), metalMaterial);
+            CreateCube(parent, "Stainless Guard Cabinet Bottom Tray", cabinetCenter + new Vector3(0.05f, -0.62f, 0f), new Vector3(1.65f, 0.08f, 2.18f), metalMaterial);
+
+            for (var i = 0; i < 4; i++)
+            {
+                var z = cabinetCenter.z - 0.78f + i * 0.52f;
+                CreateCube(parent, "Guard Cabinet Vertical Post", new Vector3(cabinetCenter.x - 0.7f, 1.32f, z), new Vector3(0.045f, 1.75f, 0.045f), metalMaterial);
+                CreateCube(parent, "Guard Cabinet Rear Post", new Vector3(cabinetCenter.x + 0.76f, 1.32f, z), new Vector3(0.045f, 1.75f, 0.045f), metalMaterial);
+            }
+
+            for (var i = 0; i < 6; i++)
+            {
+                var strip = CreateCube(parent, "White Plastic Strip Curtain", new Vector3(FillingStarWheelCenterX - 0.82f + i * 0.08f, 1.17f, FillingLineZ - 1.16f), new Vector3(0.045f, 0.82f, 0.018f), curtainMaterial);
+                strip.transform.rotation = Quaternion.Euler(0f, 0f, Mathf.Sin(i) * 4f);
+            }
+        }
+
+        private void CreateOperatorControlPanel(Transform parent, Material metalMaterial, Material panelMaterial, Material greenMaterial, Material redMaterial)
+        {
+            var panel = CreateCube(parent, "Operator Control Panel", new Vector3(1.98f, 1.58f, -0.1f), new Vector3(0.12f, 0.95f, 0.62f), panelMaterial);
+            panel.transform.rotation = Quaternion.Euler(0f, -8f, 0f);
+            CreateCube(parent, "Control Panel Stainless Mast", new Vector3(1.98f, 0.9f, -0.1f), new Vector3(0.06f, 1.15f, 0.06f), metalMaterial);
+
+            for (var row = 0; row < 4; row++)
+            {
+                for (var col = 0; col < 3; col++)
+                {
+                    var lamp = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+                    lamp.name = row == 0 ? "Green Running Indicator Lamp" : "Panel Push Button";
+                    lamp.transform.SetParent(parent);
+                    lamp.transform.position = new Vector3(1.9f, 1.88f - row * 0.18f, -0.32f + col * 0.2f);
+                    lamp.transform.localScale = Vector3.one * 0.055f;
+                    lamp.GetComponent<Renderer>().sharedMaterial = (row + col) % 3 == 0 ? redMaterial : greenMaterial;
+                }
+            }
+        }
+
+        private void CreateCapElevatorBowl(Transform parent, Material metalMaterial, Material capMaterial)
+        {
+            var bowl = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            bowl.name = "Inclined Cap Feeder Bowl";
+            bowl.transform.SetParent(parent);
+            bowl.transform.position = new Vector3(1.85f, 2.55f, 0.15f);
+            bowl.transform.rotation = Quaternion.Euler(0f, 0f, -18f);
+            bowl.transform.localScale = new Vector3(0.46f, 0.18f, 0.46f);
+            bowl.GetComponent<Renderer>().sharedMaterial = metalMaterial;
+
+            for (var i = 0; i < 10; i++)
+            {
+                var angle = i * Mathf.PI * 2f / 10f;
+                var cap = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                cap.name = "Blue Cap In Feeder Bowl";
+                cap.transform.SetParent(parent);
+                cap.transform.position = new Vector3(1.85f + Mathf.Cos(angle) * 0.22f, 2.72f, 0.15f + Mathf.Sin(angle) * 0.22f);
+                cap.transform.localScale = new Vector3(0.055f, 0.015f, 0.055f);
+                cap.GetComponent<Renderer>().sharedMaterial = capMaterial;
+            }
+
+            var chute = CreateCube(parent, "Cap Feed Chute From Bowl", new Vector3(1.42f, 2.05f, -0.1f), new Vector3(0.08f, 0.04f, 1.05f), metalMaterial);
+            chute.transform.rotation = Quaternion.Euler(28f, 0f, -28f);
+        }
+
+        private void CreateBluePneumaticHoses(Transform parent, Material hoseMaterial, Material metalMaterial)
+        {
+            var startBase = new Vector3(FillingStarWheelCenterX + 0.55f, 2.32f, FillingLineZ - 0.65f);
+            for (var i = 0; i < 6; i++)
+            {
+                var hose = CreateCube(parent, "Blue Pneumatic Hose", startBase + new Vector3(-0.18f + i * 0.08f, -0.28f, 0.2f + i * 0.06f), new Vector3(0.025f, 0.025f, 1.15f), hoseMaterial);
+                hose.transform.rotation = Quaternion.Euler(35f, 10f + i * 4f, 0f);
+            }
+
+            CreateCube(parent, "Compressed Air Manifold", new Vector3(FillingStarWheelCenterX + 0.52f, 1.55f, FillingLineZ - 0.82f), new Vector3(0.5f, 0.08f, 0.08f), metalMaterial);
+        }
+
+        private void CreateUnderFrameUtilities(Transform parent, Material metalMaterial, Material redMaterial)
+        {
+            CreateCube(parent, "Open Stainless Machine Frame Front", new Vector3(0.4f, 0.72f, -2.05f), new Vector3(2.7f, 0.06f, 0.06f), metalMaterial);
+            CreateCube(parent, "Open Stainless Machine Frame Rear", new Vector3(0.4f, 0.72f, 1.45f), new Vector3(2.7f, 0.06f, 0.06f), metalMaterial);
+            for (var i = 0; i < 5; i++)
+            {
+                var x = -0.85f + i * 0.62f;
+                CreateCube(parent, "Stainless Frame Leg", new Vector3(x, 0.28f, -2.05f), new Vector3(0.055f, 0.62f, 0.055f), metalMaterial);
+                CreateCube(parent, "Stainless Frame Leg", new Vector3(x, 0.28f, 1.45f), new Vector3(0.055f, 0.62f, 0.055f), metalMaterial);
+            }
+
+            var compressor = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            compressor.name = "Red Air Compressor Tank";
+            compressor.transform.SetParent(parent);
+            compressor.transform.position = new Vector3(-1.18f, 0.22f, 1.6f);
+            compressor.transform.rotation = Quaternion.Euler(0f, 0f, 90f);
+            compressor.transform.localScale = new Vector3(0.18f, 0.48f, 0.18f);
+            compressor.GetComponent<Renderer>().sharedMaterial = redMaterial;
+        }
+
+        private void CreateFinishedBottleAccumulationTable(Transform parent, Material metalMaterial, Material bottleMaterial, Material waterMaterial, Material capMaterial, Material labelMaterial)
+        {
+            CreateCube(parent, "Finished Bottle Accumulation Table", new Vector3(1.18f, 0.34f, 4.35f), new Vector3(2.3f, 0.08f, 1.15f), metalMaterial);
+            for (var i = 0; i < 14; i++)
+            {
+                var col = i % 7;
+                var row = i / 7;
+                var bottle = CreateBottleTemplate(parent, bottleMaterial, waterMaterial, capMaterial, labelMaterial);
+                bottle.name = $"Finished Blue Bottle Prop {i + 1}";
+                bottle.transform.position = new Vector3(0.42f + col * 0.24f, 0.82f, 4.0f + row * 0.34f);
+                bottle.gameObject.SetActive(true);
+                bottle.SetVolume(1f);
+                bottle.capPlaced = true;
+                bottle.cappingCompleted = true;
+                bottle.RefreshVisuals();
+            }
         }
 
         private GameObject CreateCube(Transform parent, string name, Vector3 position, Vector3 scale, Material material)

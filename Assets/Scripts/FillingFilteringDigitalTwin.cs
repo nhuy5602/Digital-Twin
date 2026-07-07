@@ -552,7 +552,7 @@ namespace ConveyorTwin
                 yield return null;
             }
 
-            bottle.transform.position = new Vector3(neckRailStartX, outlet.y, neckRailZ);
+            bottle.transform.position = new Vector3(neckRailStartX, neckRailStartBottleY, neckRailZ);
             bottle.status = BottleQualityStatus.Empty;
             outletBottles.Remove(bottle);
             lineBottles.Add(bottle);
