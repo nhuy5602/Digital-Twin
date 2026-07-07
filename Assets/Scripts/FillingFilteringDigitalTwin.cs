@@ -146,6 +146,7 @@ namespace ConveyorTwin
         public string StarWheelPhase { get; private set; } = "Waiting for infeed";
         public float StarWheelStepAngleDegrees => 360f / Mathf.Max(1, starWheelPocketCount);
         public float StarWheelPocketPitchM => Mathf.PI * 2f * starWheelPocketRadius / Mathf.Max(1, starWheelPocketCount);
+        public float ConveyorBottleSpacingM => StarWheelPocketPitchM;
         public int FillingStationEndPocketIndex => fillingStationStartPocketIndex + ActiveFillingNozzleCount - 1;
         private int StarWheelIndexStepPockets => Mathf.Clamp(starWheelIndexStepPockets, 1, Mathf.Max(1, starWheelPocketCount));
         private int FillingExitPocketIndex => Mathf.Max(0, starWheelPocketCount - 1);
@@ -823,7 +824,7 @@ namespace ConveyorTwin
                     return resolvedZ;
                 }
 
-                var spacedZ = nearestAheadZ - minimumBottleSpacingM;
+                var spacedZ = nearestAheadZ - ConveyorBottleSpacingM;
                 if (resolvedZ <= spacedZ + 0.001f)
                 {
                     return resolvedZ;
@@ -1805,10 +1806,16 @@ namespace ConveyorTwin
             return Mathf.Max(0.05f, starWheelIndexDurationSeconds) * Mathf.Max(1, slotDelta);
         }
 
-        private float NextStarWheelReleaseConveyorZ()
+        private float StarWheelReleaseConveyorZ()
         {
             var exitPoint = StarWheelSlotPosition(FillingExitPocketIndex);
-            var finalZ = exitPoint.z + minimumBottleSpacingM * 0.6f;
+            return exitPoint.z + ConveyorBottleSpacingM * 0.6f;
+        }
+
+        private bool IsStarWheelReleaseConveyorClear()
+        {
+            var releaseZ = StarWheelReleaseConveyorZ();
+            var requiredSpacing = ConveyorBottleSpacingM;
             foreach (var bottle in lineBottles)
             {
                 if (bottle == null)
@@ -1817,13 +1824,14 @@ namespace ConveyorTwin
                 }
 
                 var position = bottle.transform.position;
-                if (Mathf.Abs(position.x - lineX) < 0.25f && position.z >= finalZ - minimumBottleSpacingM)
+                if (Mathf.Abs(position.x - lineX) < 0.25f &&
+                    Mathf.Abs(position.z - releaseZ) < requiredSpacing)
                 {
-                    finalZ = Mathf.Max(finalZ, position.z + minimumBottleSpacingM);
+                    return false;
                 }
             }
 
-            return finalZ;
+            return true;
         }
 
         private Vector3 StarWheelSlotPosition(float slotIndex)
@@ -1905,8 +1913,13 @@ namespace ConveyorTwin
                 queuedStarWheelReleaseBottles.Remove(bottle);
                 if (bottle != null)
                 {
-                    yield return ReleaseOneFilledBottleToConveyor(bottle, NextStarWheelReleaseConveyorZ());
-                    var speedBasedGap = minimumBottleSpacingM / Mathf.Max(0.1f, ConveyorEffectiveSpeedMps) * 0.65f;
+                    while (!IsStarWheelReleaseConveyorClear())
+                    {
+                        yield return null;
+                    }
+
+                    yield return ReleaseOneFilledBottleToConveyor(bottle, StarWheelReleaseConveyorZ());
+                    var speedBasedGap = ConveyorBottleSpacingM / Mathf.Max(0.1f, ConveyorEffectiveSpeedMps) * 0.65f;
                     yield return new WaitForSeconds(Mathf.Max(0.12f, starWheelReleaseGapSeconds, speedBasedGap));
                 }
             }

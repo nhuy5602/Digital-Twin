@@ -47,7 +47,7 @@ namespace ConveyorTwin
             DrawLine($"   Turntable buffer: {process.TurntableBufferCount} bottles | Conveyor: {process.BottlesOnConveyorCount}");
             DrawLine($"   omega: {process.TurntableAngularSpeedRadPerSec:0.00} rad/s | a_c rim: {process.CentrifugalAccelerationAtRimMps2:0.00} m/s2");
             DrawLine($"   Slat pitch: {process.slatPitchM:0.00} m | slip ratio: {process.conveyorSlipRatio:P0}");
-            DrawLine($"   Star wheel step: {process.StarWheelStepAngleDegrees:0.0} deg | pitch: {process.StarWheelPocketPitchM:0.00} m");
+            DrawLine($"   Star wheel step: {process.StarWheelStepAngleDegrees:0.0} deg | conveyor spacing: {process.ConveyorBottleSpacingM:0.00} m");
             DrawLine($"2. Filling indexed: {process.BottlesAtFillingStation}/{process.ActiveFillingNozzleCount} | Conveyor stopped: {process.ConveyorStoppedForFilling}");
             DrawLine($"   Star wheel phase: {process.StarWheelPhase}");
             DrawLine($"   Turntable paused: {process.TurntablePaused} | Star wheel locked: {process.StarWheelLocked}");
