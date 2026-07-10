@@ -119,8 +119,8 @@ pocketPitch = 2 * pi * starWheelPocketRadius / 10
 - Khi batch đủ chai dưới vòi, hệ thống kích hoạt dòng chảy `Liquid Flow`.
 - 90% chai được rót chuẩn `100%`, 10% chai bị underfilled `50-60%` để mô phỏng lỗi nghẹt vòi.
 - Sau vùng fill, nắp được cấp bằng `Cap Dropper`.
-- Trong phần sau của star wheel, 1 `Rotary Capping Head` di chuyển tới pocket chai và đóng nắp tuần tự.
-- Tốc độ quay đầu đóng nắp được đặt bằng `10x` tốc độ góc của star wheel; hệ thống không chờ đủ 3 chai mới bắt đầu đóng nắp.
+- Trong phần sau của star wheel, 1 `Rotary Capping Head` được cố định tại pocket 7 để đóng nắp vùng capping.
+- Tốc độ quay đầu đóng nắp được đặt bằng `10x` tốc độ góc của star wheel; đầu capper không nhảy qua pocket 8 và 9.
 - Hết star wheel, chai rời pocket theo tiếp tuyến và quay lại conveyor thẳng để đi qua QC.
 
 Digital Twin Data:

@@ -1098,7 +1098,14 @@ namespace ConveyorTwin
                 starWheelIndexingSince = -1f;
             }
 
-            var fillingTimeout = Mathf.Max(starWheelLockRecoverySeconds, fillingTimeSeconds + fillingNozzleMoveSeconds * 2f + starWheelIndexDurationSeconds + 2f);
+            var fillingTimeout = Mathf.Max(
+                starWheelLockRecoverySeconds,
+                fillingTimeSeconds +
+                fillingNozzleMoveSeconds * 2f +
+                StarWheelIndexDurationForSlots(StarWheelIndexStepPockets) +
+                cappingTimeSeconds +
+                capperMoveSeconds * 2f +
+                8f);
             if (fillingStationBusy && fillingStationBusySince > 0f && Time.time - fillingStationBusySince > fillingTimeout)
             {
                 fillingStationBusy = false;
@@ -2134,45 +2141,45 @@ namespace ConveyorTwin
             }
 
             AlignCappingHeadsToStarWheelPockets(activeHeads);
-            for (var batchIndex = 0; batchIndex < batch.Count; batchIndex++)
+            foreach (var bottle in batch)
             {
-                var bottle = batch[batchIndex];
-                if (bottle == null || !fillingSlotAssignments.ContainsKey(bottle))
+                if (bottle != null && fillingSlotAssignments.ContainsKey(bottle))
                 {
-                    continue;
-                }
-
-                cappingBottles.Add(bottle);
-                SnapBottleToFillingSlot(bottle);
-
-                var pocketPosition = StarWheelSlotPosition(fillingSlotAssignments[bottle]);
-                var headBasePosition = activeHeads[0].position;
-                var targetHeadPosition = new Vector3(pocketPosition.x, headBasePosition.y, pocketPosition.z);
-                var targetPositions = new[] { targetHeadPosition };
-                yield return MoveCappingHeads(activeHeads, new[] { headBasePosition }, targetPositions, capperMoveSeconds);
-
-                var basePositions = GetTransformPositions(activeHeads);
-                var downPositions = OffsetPositions(basePositions, Vector3.down * (capperStrokeM * 0.65f));
-                yield return MoveAndSpinCappingHeads(activeHeads, basePositions, downPositions, capperMoveSeconds, 360f);
-
-                var spinTime = Mathf.Max(0.05f, cappingTimeSeconds);
-                var elapsed = 0f;
-                while (elapsed < spinTime)
-                {
-                    elapsed += Time.deltaTime;
+                    cappingBottles.Add(bottle);
                     SnapBottleToFillingSlot(bottle);
-                    SpinCappingHeadTools(activeHeads, CappingHeadAngularSpeedDegreesPerSecond);
-                    yield return null;
+                }
+            }
+
+            var basePositions = GetTransformPositions(activeHeads);
+            var downPositions = OffsetPositions(basePositions, Vector3.down * (capperStrokeM * 0.65f));
+            yield return MoveAndSpinCappingHeads(activeHeads, basePositions, downPositions, capperMoveSeconds, 360f);
+
+            var spinTime = Mathf.Max(0.05f, cappingTimeSeconds);
+            var elapsed = 0f;
+            while (elapsed < spinTime)
+            {
+                elapsed += Time.deltaTime;
+                foreach (var bottle in batch)
+                {
+                    SnapBottleToFillingSlot(bottle);
                 }
 
-                bottle.capPlaced = true;
-                bottle.cappingCompleted = true;
-                bottle.status = BottleQualityStatus.Capped;
-                bottle.RefreshVisuals();
-
-                yield return MoveCappingHeads(activeHeads, downPositions, basePositions, capperMoveSeconds);
-                cappingBottles.Remove(bottle);
+                SpinCappingHeadTools(activeHeads, CappingHeadAngularSpeedDegreesPerSecond);
+                yield return null;
             }
+
+            foreach (var bottle in batch)
+            {
+                if (bottle != null && fillingSlotAssignments.ContainsKey(bottle))
+                {
+                    bottle.capPlaced = true;
+                    bottle.cappingCompleted = true;
+                    bottle.status = BottleQualityStatus.Capped;
+                    bottle.RefreshVisuals();
+                }
+            }
+
+            yield return MoveCappingHeads(activeHeads, downPositions, basePositions, capperMoveSeconds);
 
             foreach (var bottle in batch)
             {
