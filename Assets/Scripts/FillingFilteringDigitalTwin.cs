@@ -1271,7 +1271,6 @@ namespace ConveyorTwin
 
                 if (pocketIndex >= cappingPocketStartIndex &&
                     pocketIndex <= FillingExitPocketIndex &&
-                    bottle.capPlaced &&
                     !bottle.cappingCompleted)
                 {
                     cappingTargets.Add(entry);
