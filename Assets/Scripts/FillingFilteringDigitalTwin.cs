@@ -164,6 +164,7 @@ namespace ConveyorTwin
         public float ConveyorBottleSpacingM => StarWheelPocketPitchM;
         public int FillingStationEndPocketIndex => fillingStationStartPocketIndex + ActiveFillingNozzleCount - 1;
         private int StarWheelIndexStepPockets => Mathf.Clamp(starWheelIndexStepPockets, 1, Mathf.Max(1, starWheelPocketCount));
+        private int StarWheelFeedBatchSize => Mathf.Clamp(Mathf.Min(StarWheelIndexStepPockets, ActiveFillingNozzleCount), 1, Mathf.Max(1, starWheelPocketCount));
         private int FillingExitPocketIndex => Mathf.Max(0, starWheelPocketCount - 1);
         private float InfeedRailBottleSpacingM => Mathf.Max(0.18f, turntableBottleRadius * 1.7f);
         private float InfeedRailCaptureZoneM => Mathf.Max(0.45f, InfeedRailBottleSpacingM * StarWheelIndexStepPockets);
@@ -972,6 +973,25 @@ namespace ConveyorTwin
             return true;
         }
 
+        private int CountBottlesWaitingOnInfeedRail()
+        {
+            var count = 0;
+            foreach (var bottle in lineBottles)
+            {
+                if (bottle == null || bottle.fillingCompleted || fillingSlotAssignments.ContainsKey(bottle))
+                {
+                    continue;
+                }
+
+                if (Mathf.Abs(bottle.transform.position.z - neckRailZ) < 0.25f)
+                {
+                    count++;
+                }
+            }
+
+            return count;
+        }
+
         private bool CanCaptureBottleForFilling()
         {
             return !fillingStationBusy && !fillingCaptureBusy && !StarWheelIndexing && fillingSlotAssignments.Count < starWheelPocketCount;
@@ -1102,7 +1122,8 @@ namespace ConveyorTwin
                 return;
             }
 
-            if (CanIndexStarWheel() || CanCaptureBottleForFilling())
+            if ((CanIndexStarWheel() || CanCaptureBottleForFilling()) &&
+                CountBottlesWaitingOnInfeedRail() >= StarWheelFeedBatchSize)
             {
                 StartCoroutine(CaptureBottleIntoStarWheel(frontBottle));
                 return;
@@ -1380,6 +1401,11 @@ namespace ConveyorTwin
                 yield break;
             }
 
+            while (CountBottlesWaitingOnInfeedRail() < StarWheelFeedBatchSize)
+            {
+                yield return null;
+            }
+
             var indexedBottles = new Dictionary<BottleProcessState, int>();
             foreach (var entry in fillingSlotAssignments)
             {
@@ -1389,7 +1415,9 @@ namespace ConveyorTwin
                 }
             }
 
-            yield return IndexStarWheelOnePitchWithRailFeed(indexedBottles, StarWheelIndexStepPockets, false);
+            // Advance exactly one three-pocket index and capture the next three bottles
+            // during the same movement, keeping the filling window continuously loaded.
+            yield return IndexStarWheelOnePitchWithRailFeed(indexedBottles, StarWheelIndexStepPockets, true);
             foreach (var entry in indexedBottles)
             {
                 if (entry.Key == null)
