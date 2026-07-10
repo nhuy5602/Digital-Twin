@@ -1430,42 +1430,8 @@ namespace ConveyorTwin
                 }
             }
 
-            // Move the filled group into the capping arc without loading the next group yet.
-            yield return IndexStarWheelOnePitchWithRailFeed(indexedBottles, StarWheelIndexStepPockets, false);
-            foreach (var entry in indexedBottles)
-            {
-                if (entry.Key == null)
-                {
-                    continue;
-                }
-
-                var newPocketIndex = Mathf.Min(entry.Value + StarWheelIndexStepPockets, FillingExitPocketIndex);
-                fillingSlotAssignments[entry.Key] = newPocketIndex;
-                entry.Key.transform.position = StarWheelSlotPosition(newPocketIndex);
-            }
-
-            // The single capper is fixed at pocket 7. Index one pocket at a time so
-            // every bottle in the filled group passes underneath that fixed head.
-            for (var capPass = 0; capPass < StarWheelIndexStepPockets; capPass++)
-            {
-                yield return IndexStarWheelOnePitchWithRailFeed(indexedBottles, 1, false);
-                foreach (var entry in indexedBottles)
-                {
-                    if (entry.Key == null)
-                    {
-                        continue;
-                    }
-
-                    var newPocketIndex = Mathf.Min(entry.Value + 1, FillingExitPocketIndex);
-                    fillingSlotAssignments[entry.Key] = newPocketIndex;
-                    entry.Key.transform.position = StarWheelSlotPosition(newPocketIndex);
-                }
-
-                yield return ApplyStarWheelPocketOperations();
-                yield return ReleaseFilledBottlesAtExit();
-            }
-
-            // Once all three bottles have passed pocket 7, load the next group.
+            // One 108-degree index moves the filled group toward the next stations
+            // while loading the next three bottles into the filling pockets.
             yield return IndexStarWheelOnePitchWithRailFeed(indexedBottles, StarWheelIndexStepPockets, true);
             foreach (var entry in indexedBottles)
             {

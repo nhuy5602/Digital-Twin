@@ -117,7 +117,7 @@ namespace ConveyorTwin
             process.qcZ = 0.65f;
             process.pusherZ = 1.15f;
             process.cappingZ = CappingFirstZ;
-            process.cappingHeadCount = 1;
+            process.cappingHeadCount = 3;
             process.cappingFirstZ = CappingFirstZ;
             process.cappingPitchM = CappingPitch;
             process.cappingQueueStopZ = 1.45f;
@@ -979,7 +979,7 @@ namespace ConveyorTwin
 
             var sensor = CreateCube(parent, "Cap Drop Sensor Beam", new Vector3(capDropPosition.x, 0.92f, capDropPosition.z), new Vector3(0.42f, 0.035f, 0.035f), sensorMaterial).transform;
 
-            for (var i = 0; i < 1; i++)
+            for (var i = 0; i < 3; i++)
             {
                 var pocketIndex = CappingPocketStartIndex + i;
                 var stationPosition = StarWheelPocketPosition(pocketIndex, 0f);

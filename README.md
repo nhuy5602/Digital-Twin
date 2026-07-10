@@ -101,7 +101,7 @@ Thiết bị:
 3 x Filling Nozzle
 Liquid Vessel
 Cap Dropper
-1 x Rotary Capping Head
+3 x Rotary Capping Head
 ```
 
 Logic vận hành:
@@ -119,8 +119,8 @@ pocketPitch = 2 * pi * starWheelPocketRadius / 10
 - Khi batch đủ chai dưới vòi, hệ thống kích hoạt dòng chảy `Liquid Flow`.
 - 90% chai được rót chuẩn `100%`, 10% chai bị underfilled `50-60%` để mô phỏng lỗi nghẹt vòi.
 - Sau vùng fill, nắp được cấp bằng `Cap Dropper`.
-- Trong phần sau của star wheel, 1 `Rotary Capping Head` được cố định tại pocket 7 để đóng nắp vùng capping.
-- Tốc độ quay đầu đóng nắp được đặt bằng `10x` tốc độ góc của star wheel; đầu capper không nhảy qua pocket 8 và 9.
+- Trong phần sau của star wheel, 3 `Rotary Capping Head` được cố định lần lượt tại pocket 7, 8, 9.
+- Starwheel dừng lần thứ nhất để fill 3 chai và dừng lần thứ hai để cả 3 đầu cap đóng nắp trước khi quay tiếp.
 - Hết star wheel, chai rời pocket theo tiếp tuyến và quay lại conveyor thẳng để đi qua QC.
 
 Digital Twin Data:
@@ -267,8 +267,8 @@ if 3 bottles are under filling nozzles:
     lock star wheel
     fill all 3 bottles in parallel
 after filling:
-    index one pocket at a time through fixed pocket 7
-    tighten each bottle with the fixed capper
+    index 3 pockets to capping pockets 7, 8, 9
+    stop star wheel and tighten all 3 bottles in parallel
 release bottle back to straight conveyor
 ```
 
