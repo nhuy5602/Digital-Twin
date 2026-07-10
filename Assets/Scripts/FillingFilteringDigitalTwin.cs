@@ -1102,7 +1102,8 @@ namespace ConveyorTwin
                 starWheelLockRecoverySeconds,
                 fillingTimeSeconds +
                 fillingNozzleMoveSeconds * 2f +
-                StarWheelIndexDurationForSlots(StarWheelIndexStepPockets) +
+                StarWheelIndexDurationForSlots(StarWheelIndexStepPockets) * 2f +
+                StarWheelIndexDurationForSlots(1) * StarWheelIndexStepPockets +
                 cappingTimeSeconds +
                 capperMoveSeconds * 2f +
                 8f);
@@ -1429,8 +1430,42 @@ namespace ConveyorTwin
                 }
             }
 
-            // Advance exactly one three-pocket index and capture the next three bottles
-            // during the same movement, keeping the filling window continuously loaded.
+            // Move the filled group into the capping arc without loading the next group yet.
+            yield return IndexStarWheelOnePitchWithRailFeed(indexedBottles, StarWheelIndexStepPockets, false);
+            foreach (var entry in indexedBottles)
+            {
+                if (entry.Key == null)
+                {
+                    continue;
+                }
+
+                var newPocketIndex = Mathf.Min(entry.Value + StarWheelIndexStepPockets, FillingExitPocketIndex);
+                fillingSlotAssignments[entry.Key] = newPocketIndex;
+                entry.Key.transform.position = StarWheelSlotPosition(newPocketIndex);
+            }
+
+            // The single capper is fixed at pocket 7. Index one pocket at a time so
+            // every bottle in the filled group passes underneath that fixed head.
+            for (var capPass = 0; capPass < StarWheelIndexStepPockets; capPass++)
+            {
+                yield return IndexStarWheelOnePitchWithRailFeed(indexedBottles, 1, false);
+                foreach (var entry in indexedBottles)
+                {
+                    if (entry.Key == null)
+                    {
+                        continue;
+                    }
+
+                    var newPocketIndex = Mathf.Min(entry.Value + 1, FillingExitPocketIndex);
+                    fillingSlotAssignments[entry.Key] = newPocketIndex;
+                    entry.Key.transform.position = StarWheelSlotPosition(newPocketIndex);
+                }
+
+                yield return ApplyStarWheelPocketOperations();
+                yield return ReleaseFilledBottlesAtExit();
+            }
+
+            // Once all three bottles have passed pocket 7, load the next group.
             yield return IndexStarWheelOnePitchWithRailFeed(indexedBottles, StarWheelIndexStepPockets, true);
             foreach (var entry in indexedBottles)
             {

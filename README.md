@@ -267,8 +267,8 @@ if 3 bottles are under filling nozzles:
     lock star wheel
     fill all 3 bottles in parallel
 after filling:
-    drop cap
-    tighten cap in capping pockets
+    index one pocket at a time through fixed pocket 7
+    tighten each bottle with the fixed capper
 release bottle back to straight conveyor
 ```
 
