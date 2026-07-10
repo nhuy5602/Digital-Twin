@@ -1,6 +1,6 @@
 # Digital Twin: Filling & Filtering Line
 
-Project Unity mô phỏng quy trình **filling & filtering** cho dây chuyền chai nước.
+Project Unity mô phỏng dây chuyền **filling & filtering** chai nước ở mức Digital Model / Digital Shadow. Mô hình tập trung vào luồng chai thực tế: cấp chai bằng turntable, đưa vào star wheel để rót và đóng nắp, kiểm tra QC, loại chai lỗi, rồi gom chai đạt vào accumulation turntable cuối line để đóng thùng.
 
 Scene chính:
 
@@ -32,7 +32,7 @@ D:\Học thạc sĩ\IT6019\Conveyor-Digital-Twin
 Assets > Scenes > SampleScene
 ```
 
-4. Nếu muốn dựng lại scene tự động, chọn menu:
+4. Nếu muốn dựng lại toàn bộ scene tự động, chọn menu:
 
 ```text
 Tools > Conveyor Twin > Build Demo Scene
@@ -40,51 +40,49 @@ Tools > Conveyor Twin > Build Demo Scene
 
 5. Bấm **Play**.
 
-Khi chạy, các chai sẽ đi qua infeed, trạm chiết rót, trạm QC, trạm phân loại. Chai đạt sẽ đi thẳng xuống Accept Chute. Chai lỗi sẽ bị Pneumatic Pusher đẩy sang Reject Chute.
+Khi chạy, chai sẽ rơi vào infeed turntable, ra conveyor hẹp dạng slat chain, vào star wheel để fill và đóng nắp, đi qua QC, chai lỗi bị piston đẩy sang reject chute, chai đạt đi tiếp vào accumulation turntable cuối line và được chuyển vào thùng carton theo batch.
 
 ## 1. Bottle Infeed Station
 
-Thiết bị sử dụng:
+Thiết bị:
 
 ```text
 Infeed Turntable
+Bottle Dropper
+Turntable Outlet
 ```
 
 Logic vận hành:
 
 - Chai rỗng được sinh ra từ `Bottle Spawn Point` phía trên mâm.
 - Chai rơi xuống `Infeed Turntable`.
-- Khi bấm Play, turntable được nạp sẵn `initialTurntableBottleCount = 12` chai để không bị trống lúc bắt đầu.
-- Sau đó hệ thống chỉ sinh thêm chai từ trên xuống khi buffer thiếu chai.
-- Mâm quay tự xoay tại chỗ như một buffer/caching table.
-- Mô hình dùng công thức lực ly tâm gần đúng để đẩy chai dạt ra rìa barrier:
+- Turntable hoạt động như buffer/caching table: chai tích lại trên mâm, motor xoay mâm, chai dạt dần ra rìa barrier.
+- Khi buffer đủ `releaseThreshold` và chai đi đến vùng outlet, hệ thống xả từng chai qua `Turntable Outlet`.
+- Chai từ outlet đi vào line hẹp trước khi được star wheel bắt vào pocket.
+
+Công thức vật lý mô phỏng lực ly tâm:
 
 ```text
 omega = rpm * 2π / 60
 a_c = omega^2 * r
 ```
 
-- Khi chai sát rìa barrier và đi vào vùng outlet, hệ thống tự xả chai qua `Turntable Outlet`.
-- Điều kiện xả chỉ bật khi số chai trong buffer đạt `releaseThreshold`.
-- Chai sau đó đi vào conveyor chính để đến trạm filling.
-
 Digital Twin Data:
 
 - `Throughput`: năng suất chai/giờ.
-- `Infeed Motor Speed`: tốc độ mô-tơ cấp liệu, đơn vị rpm.
-- `Turntable Buffer`: số chai đang nằm trên mâm chờ ra outlet.
+- `Infeed Motor Speed`: tốc độ motor cấp liệu, đơn vị rpm.
+- `Turntable Buffer`: số chai đang nằm trên mâm.
 - `Centrifugal Acceleration`: gia tốc ly tâm tại rìa mâm.
 
-## Conveyor chính
+## 2. Slat Chain Conveyor
 
 Conveyor chính được dựng theo dạng **slat chain / modular conveyor**:
 
-- bề rộng được thu hẹp vừa kích thước chai,
-- mặt băng gồm nhiều tấm `Modular Slat Plate` chia khoảng đều theo `slatPitchM`,
-- giữa các slat có `Slat Gap Shadow` để nhìn rõ khe chia như slat chain thật,
-- có `Anti Slip Cross Rib` đặt cách quãng để giảm trượt bề mặt,
-- hai ray dẫn hướng giữ chai đi đúng một hàng,
-- chai từ outlet của turntable đi vào giữa conveyor.
+- bề rộng hẹp vừa kích thước chai,
+- mặt băng gồm nhiều `Modular Slat Plate` chia khoảng đều theo `slatPitchM`,
+- có `Slat Gap Shadow` để nhìn rõ khe giữa các mắt xích,
+- có `Anti Slip Cross Rib` để giảm trượt bề mặt,
+- rail dẫn hướng được khoét tại vùng piston reject để piston có khoảng đẩy chai lỗi.
 
 Logic chống trượt:
 
@@ -92,86 +90,49 @@ Logic chống trượt:
 effectiveSpeed = conveyorSpeed * (1 - conveyorSlipRatio)
 ```
 
-Trong demo, `conveyorSlipRatio = 0.02`, nghĩa là chai gần như bám theo slat chain và chỉ mất khoảng 2% vận tốc do trượt bề mặt. Chai cũng được giữ khoảng cách tối thiểu `minimumBottleSpacingM` để không chồng lên nhau trên conveyor hẹp.
+Trong demo, `conveyorSlipRatio = 0.02`, nghĩa là chai gần như bám theo slat chain và chỉ mất khoảng 2% vận tốc do trượt bề mặt. Khoảng cách chai trên conveyor được giữ theo pitch của star wheel để hạn chế chồng chai.
 
-## 2. Filling Station
+## 3. Filling Star Wheel
 
-Thiết bị sử dụng:
+Thiết bị:
 
 ```text
-Multiple Filling Nozzles
+10-pocket Filling Star Wheel
+3 x Filling Nozzle
 Liquid Vessel
-Filling Stop Gate
-Filling Star Wheel
+Cap Dropper
+3 x Rotary Capping Head
 ```
 
 Logic vận hành:
 
-- Dây chuyền có 4 vòi rót đặt theo cụm `Filling Nozzle 1..4`.
-- Turntable ở đầu line vẫn là buffer/caching table; sau đó chai đi qua outlet sang conveyor hẹp.
-- Bottle đi thẳng trên conveyor trước khi vào star-wheel.
-- Khi tới `Filling Star Wheel`, bottle được bắt vào các pocket và đi theo cung tròn của star-wheel.
-- Hết vùng star-wheel, bottle được trả về đường conveyor thẳng để đi qua QC, reject và capping.
-- Vì bottle đi cong trong star-wheel, 4 vòi rót cũng được đặt theo cung pocket thay vì xếp thẳng.
-- Trong Hierarchy, cụm này gồm `Scalloped Star Wheel Disc` và `Filling Arc Pocket 1..4`.
-- Bánh sao không quay liên tục; nó index từng nấc:
+- Chai đi thẳng trên conveyor, sau đó được bắt vào pocket của `Filling Star Wheel`.
+- Star wheel có `10` pocket; mỗi bước index cơ bản là:
 
 ```text
-stepAngle = 360 / starWheelPocketCount
-pocketPitch = 2 * pi * starWheelPocketRadius / starWheelPocketCount
+stepAngle = 360 / 10 = 36°
+pocketPitch = 2 * pi * starWheelPocketRadius / 10
 ```
 
-- Với `starWheelPocketCount = 14`, mỗi nhịp bánh sao quay khoảng `25.7°`; chai trong pocket được index thêm một cung bằng `pocketPitch`.
-- `Filling Stop Gate` chặn các chai phía sau chưa đến lượt fill.
-- Khi đủ 4 chai vào vị trí, conveyor dừng toàn bộ.
-- Star Wheel dừng và khóa chai ở đúng vị trí dưới vòi.
-- Các vòi phun kích hoạt dòng chảy cùng lúc.
-- Chai được rót trong thời gian `fillingTimeSeconds`.
-- Khi chưa fill xong, conveyor không chạy.
-- Nếu turntable đã đủ buffer trong lúc conveyor dừng, turntable cũng dừng.
-- Sau khi rót xong, chai rời star-wheel theo tiếp tuyến và conveyor chạy tiếp sang trạm QC.
-
-Logic lỗi tạo điểm nhấn:
-
-- 90% chai được rót chuẩn: `Properly Filled = 100%`.
-- 10% chai bị lỗi thiếu nước do nghẹt vòi: `Underfilled = 50-60%`.
+- Cụm filling dùng `3` vòi rót đặt theo cung star wheel.
+- Mỗi batch rót gồm 3 chai, tương ứng star wheel index 3 pocket trong chu kỳ filling.
+- Khi batch đủ chai dưới vòi, hệ thống kích hoạt dòng chảy `Liquid Flow`.
+- 90% chai được rót chuẩn `100%`, 10% chai bị underfilled `50-60%` để mô phỏng lỗi nghẹt vòi.
+- Sau vùng fill, nắp được cấp bằng `Cap Dropper`.
+- Trong phần sau của star wheel, 3 `Rotary Capping Head` hạ xuống và xoay để đóng nắp cho các chai đã fill.
+- Hết star wheel, chai rời pocket theo tiếp tuyến và quay lại conveyor thẳng để đi qua QC.
 
 Digital Twin Data:
 
-- `Liquid Level`: mức chất lỏng còn lại trong bồn tổng.
+- `Liquid Level`: mức chất lỏng trong bồn tổng.
 - `Filling Time`: thời gian rót gần nhất.
-- `Bottles At Filling Station`: số chai đang index dưới cụm vòi.
-- `Conveyor Stopped For Filling`: trạng thái conveyor dừng trong lúc rót.
-- `Star Wheel Locked`: trạng thái bánh sao đang khóa chai trong lúc fill.
+- `Bottles At Filling Station`: số chai đang ở vùng rót.
+- `Bottles At Capping Station`: số chai đang ở vùng đóng nắp.
+- `Star Wheel Locked`: trạng thái star wheel đang giữ chai trong batch fill/cap.
 
-## 5. Capping Station
+## 4. QC Sensor Station
 
-Thiết bị sử dụng:
-
-```text
-4 x Capping Head
-Cap Feeder Bowl
-Cap Feed Rail
-```
-
-Logic vận hành:
-
-- Chỉ chai `PASSED` mới đi tới trạm đóng nắp.
-- Chai `REJECTED` bị piston đẩy xuống reject chute trước khi tới capping.
-- Capping không nằm trong star-wheel nữa; nó nằm sau QC và reject station.
-- 4 chai đạt chuẩn được giữ trên cụm đóng nắp thẳng hàng sau khi đã kiểm tra thể tích chất lỏng.
-- Khi đủ 4 chai, conveyor dừng, 4 `Capping Head` cùng hạ xuống để đóng nắp.
-- Trong lúc đóng nắp, các chai được khóa vị trí giống cơ cấu stop/index nên không bị trôi hoặc đâm vào nhau.
-- Sau khi đóng nắp, nắp chai được bật hiển thị, chai chuyển trạng thái `CAPPED` và đi tiếp tới `Accept Chute`.
-
-Digital Twin Data:
-
-- `Bottles At Capping Station`: số chai đang index dưới cụm đóng nắp.
-- `Conveyor Stopped For Capping`: trạng thái conveyor dừng trong lúc đóng nắp.
-
-## 3. QC Sensor Station
-
-Thiết bị sử dụng:
+Thiết bị:
 
 ```text
 Photoelectric Sensor / Virtual Vision Sensor
@@ -180,7 +141,7 @@ Photoelectric Sensor / Virtual Vision Sensor
 Logic vận hành:
 
 - Chai đi qua tia quét của cảm biến.
-- Cảm biến đọc biến `liquidVolume01` của từng chai.
+- Sensor đọc biến `liquidVolume01` của từng chai.
 - Quy tắc kiểm tra:
 
 ```text
@@ -191,47 +152,73 @@ Volume < 95%   => REJECTED
 Digital Twin Data:
 
 - `Inspection Status = Normal` nếu chai đạt.
-- `Inspection Status = AnomalyDetected` nếu phát hiện chai thiếu nước.
+- `Inspection Status = AnomalyDetected` nếu chai thiếu nước.
 
-## 4. Sorting & Rejection Station
+## 5. Sorting & Rejection Station
 
-Thiết bị sử dụng:
+Thiết bị:
 
 ```text
 Pneumatic Pusher
-Sliding Chute
-Accept Chute
 Reject Chute
 ```
 
 Logic vận hành:
 
-- Chai `PASSED` tiếp tục chạy thẳng đến cuối băng tải và trượt xuống `Accept Chute`.
+- Chai `PASSED` tiếp tục chạy thẳng đến cuối conveyor.
 - Chai `REJECTED` khi đến vị trí piston sẽ gọi logic `TriggerPusher()`.
-- Piston lao ra, đẩy chai lỗi sang `Reject Chute`, sau đó co về.
+- Piston đỏ lao ra qua phần rail đã khoét, đẩy chai lỗi sang `Reject Chute`, sau đó co về.
 
 Digital Twin Data:
 
-- `Total Passed`: tổng chai đạt.
 - `Total Rejected`: tổng chai lỗi.
+
+## 6. Accumulation & Carton Packing Station
+
+Thiết bị:
+
+```text
+Accumulation Turntable
+Accumulation Inlet Counting Sensor
+Inlet Gate
+Outlet Gate
+Carton Box
+Carton Discharge Pusher
+```
+
+Logic vận hành:
+
+- Chai đạt sau QC đi đến cảm biến trước cổng vào accumulation turntable.
+- Sensor tăng `AccumulationEntryCount` mỗi khi một chai đi vào.
+- Chai được đưa vào `Accumulation Turntable` và xoay tích trữ như một buffer cuối line.
+- Khi buffer đủ `accumulationBatchSize = 6` chai:
+  - `Inlet Gate` đóng để chặn chai mới.
+  - `Outlet Gate` mở.
+  - Chai trong turntable được chuyển lần lượt vào `Active Carton Box`.
+  - `Carton Discharge Pusher` đẩy thùng đầy ra ngoài.
+  - Hệ thống reset thùng rỗng mới và mở lại cổng vào.
+
+Digital Twin Data:
+
+- `Accumulation Buffer`: số chai đang chờ trong turntable cuối.
+- `Sensor Count`: tổng số chai đã vào turntable cuối.
+- `Cartons`: số thùng carton đã đóng xong.
+- `Total Passed`: tổng chai đạt.
 
 ## Dashboard
 
 HUD trong game hiển thị:
 
-- Infeed throughput, bottles/hour.
+- Throughput, bottles/hour.
 - Infeed motor speed, rpm.
 - Turntable buffer và số chai trên conveyor.
 - `omega` và `a_c rim` của turntable.
 - Slat pitch và slip ratio của conveyor.
-- Số chai đang chờ/đang index tại cụm filling.
-- Trạng thái conveyor stop khi filling.
-- Vessel liquid level, L.
-- Filling time, s.
+- Số chai ở filling/capping.
+- Vessel liquid level và filling time.
 - Inspection status.
-- Total passed.
-- Total rejected.
-- Rule kiểm tra: `volume >= 95%`.
+- Accumulation buffer, inlet/outlet gate state, cartons filled.
+- Total passed / rejected.
 
 ## Công thức và logic mô phỏng
 
@@ -269,49 +256,38 @@ Logic xác suất lỗi:
 10% => volume = random(0.5, 0.6)
 ```
 
-Logic multi-nozzle filling:
+Logic star wheel + filling:
 
 ```text
-assign bottle to downstream filling slot first
-star wheel indexes bottle into pocket
-if assignedBottleCount == fillingNozzleCount
-and all bottles reached slot:
-    stop conveyor
+capture bottle into star wheel pocket
+index pocket along star wheel arc
+if 3 bottles are under filling nozzles:
     lock star wheel
-    close filling stop gate
-    snap bottles to nozzle positions
-    fill all bottles in parallel
-    open gate
-    restart conveyor
+    fill all 3 bottles in parallel
+after filling:
+    drop cap
+    tighten cap in capping pockets
+release bottle back to straight conveyor
 ```
 
-Logic interlock turntable:
+Logic accumulation cuối line:
 
 ```text
-if conveyor is stopped for filling
-and turntableBuffer >= releaseThreshold:
-    pause turntable motor
-```
-
-Logic turntable buffer:
-
-```text
-prefill initial bottles on turntable
-if buffer has room:
-    spawn extra bottle from above
-    drop to turntable
-omega = rpm * 2π / 60
-a_c = omega^2 * r
-bottle moves outward to rim barrier
-if bufferCount >= releaseThreshold and bottle reaches outlet sector:
-    move one bottle to outlet
-    send bottle to conveyor
+if capped passed bottle reaches accumulation sensor:
+    count bottle
+    move bottle into accumulation turntable
+if accumulation count >= batch size:
+    close inlet gate
+    open outlet gate
+    transfer bottles into carton
+    push full carton away
+    reset empty carton
 ```
 
 ## File quan trọng
 
 - `FillingFilteringDigitalTwin.cs`: điều phối toàn bộ quy trình.
-- `BottleProcessState.cs`: lưu trạng thái từng chai, volume, pass/reject.
+- `BottleProcessState.cs`: lưu trạng thái từng chai, volume, pass/reject/capped.
 - `FillingFilteringHud.cs`: dashboard digital twin.
 - `ConveyorDemoRuntimeBootstrap.cs`: tự dựng scene demo khi mở/chạy scene.
 - `ConveyorDemoSceneBuilder.cs`: menu editor để dựng lại scene.

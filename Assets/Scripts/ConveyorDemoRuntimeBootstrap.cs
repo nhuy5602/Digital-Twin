@@ -10,7 +10,8 @@ namespace ConveyorTwin
         private const float FillingStarWheelCenterX = 0.72f;
         private const float FillingLineZ = -0.903f;
         private static readonly Vector3 FillingStarWheelVisualCenter = new Vector3(FillingStarWheelCenterX, 0f, FillingLineZ);
-        private static readonly Vector3 FillingStarWheelBottleCenter = new Vector3(FillingStarWheelCenterX, 0.82f, FillingLineZ);
+        private static readonly Vector3 FillingStarWheelBottleCenter = new Vector3(FillingStarWheelCenterX, 0.92f, FillingLineZ);
+        private static readonly Vector3 AccumulationTurntableCenter = new Vector3(0f, 0.92f, 4.78f);
         private static readonly Vector3 ScallopedStarWheelDiscLocalPosition = new Vector3(0f, 1.485f, 0f);
         private static readonly Vector3 InfeedTurntableBottleCenter = new Vector3(-3.253f, 1.05f, FillingLineZ);
         private const int FillingStarWheelPocketCount = 10;
@@ -60,11 +61,7 @@ namespace ConveyorTwin
             var capTubeMaterial = CreateMaterial(new Color(0.65f, 0.9f, 1f, 0.28f));
             var sensorMaterial = CreateMaterial(new Color(0.1f, 0.75f, 1f));
             var rejectMaterial = CreateMaterial(new Color(1f, 0.35f, 0.22f));
-            var acceptMaterial = CreateMaterial(new Color(0.25f, 0.9f, 0.35f));
-            var clearGuardMaterial = CreateMaterial(new Color(0.78f, 0.95f, 1f, 0.22f));
-            var hoseMaterial = CreateMaterial(new Color(0.02f, 0.32f, 0.85f));
-            var panelMaterial = CreateMaterial(new Color(0.12f, 0.14f, 0.14f));
-            var curtainMaterial = CreateMaterial(new Color(0.96f, 0.96f, 0.9f, 0.45f));
+            var cartonMaterial = CreateMaterial(new Color(0.62f, 0.42f, 0.22f));
 
             CreateFloor(root.transform, floorMaterial);
             CreateConveyor(root.transform, beltMaterial, metalMaterial, slatMaterial, ribMaterial, sensorMaterial);
@@ -79,10 +76,8 @@ namespace ConveyorTwin
             var qcBeam = CreateQcSensor(root.transform, sensorMaterial, metalMaterial);
             var cappingStation = CreateCappingStation(root.transform, metalMaterial, capMaterial, capTubeMaterial, sensorMaterial);
             var pusher = CreatePusher(root.transform, metalMaterial, rejectMaterial);
-            var acceptChute = CreateChute(root.transform, "Accept Chute", new Vector3(0.95f, 0.28f, 3.95f), acceptMaterial, 18f);
             var rejectChute = CreateChute(root.transform, "Reject Chute", new Vector3(-1.15f, 0.35f, 1.25f), rejectMaterial, -25f);
-            CreateVideoStyleMachineDetails(root.transform, metalMaterial, clearGuardMaterial, panelMaterial, hoseMaterial, capMaterial, sensorMaterial, rejectMaterial, curtainMaterial);
-            CreateFinishedBottleAccumulationTable(root.transform, metalMaterial, bottleMaterial, waterMaterial, capMaterial, labelMaterial);
+            var accumulationStation = CreateAccumulationTurntableStation(root.transform, metalMaterial, sensorMaterial, cartonMaterial);
             var bottleTemplate = CreateBottleTemplate(root.transform, bottleMaterial, waterMaterial, capMaterial, labelMaterial);
 
             var processObject = new GameObject("Filling Filtering Process Controller");
@@ -105,8 +100,13 @@ namespace ConveyorTwin
             process.capSensorBeam = cappingStation.sensor;
             process.capMagazineCaps = cappingStation.magazineCaps;
             process.pneumaticPusher = pusher;
-            process.acceptChute = acceptChute;
             process.rejectChute = rejectChute;
+            process.accumulationTurntable = accumulationStation.turntable;
+            process.accumulationSensorBeam = accumulationStation.sensor;
+            process.accumulationInletGate = accumulationStation.inletGate;
+            process.accumulationOutletGate = accumulationStation.outletGate;
+            process.cartonBox = accumulationStation.carton;
+            process.cartonPusher = accumulationStation.cartonPusher;
             process.bottleTemplate = bottleTemplate;
             process.conveyorSpeedMps = 0.85f;
             process.slatPitchM = 0.22f;
@@ -127,7 +127,13 @@ namespace ConveyorTwin
             process.capperMoveSeconds = 0.14f;
             process.capperStrokeM = 0.2f;
             process.cappingTimeSeconds = 0.35f;
-            process.acceptEndZ = 3.75f;
+            process.acceptEndZ = 3.68f;
+            process.accumulationTurntableCenter = AccumulationTurntableCenter;
+            process.accumulationTurntableRadius = 0.86f;
+            process.accumulationBatchSize = 6;
+            process.accumulationSensorZ = 3.68f;
+            process.cartonLoadPosition = new Vector3(1.38f, 0.58f, AccumulationTurntableCenter.z);
+            process.cartonExitPosition = new Vector3(2.45f, 0.58f, AccumulationTurntableCenter.z + 0.35f);
             process.starWheelPocketCount = FillingStarWheelPocketCount;
             process.starWheelCenter = FillingStarWheelBottleCenter;
             process.starWheelPocketRadius = FillingStarWheelBottleRadius;
@@ -260,14 +266,34 @@ namespace ConveyorTwin
 
             CreateConveyorAnimator(parent, "Main Slat Chain Motion", movingParts, Vector3.forward, 0.85f, startZ - pitch, startZ + slatCount * pitch);
 
-            CreateCube(parent, "Left Narrow Guide Rail", new Vector3(-0.28f, 0.74f, 0.55f), new Vector3(0.035f, 0.1f, 10.7f), metalMaterial);
-            CreateCube(parent, "Right Narrow Guide Rail", new Vector3(0.28f, 0.74f, 0.55f), new Vector3(0.035f, 0.1f, 10.7f), metalMaterial);
+            CreateMainConveyorGuideRail(parent, "Left Narrow Guide Rail", -0.28f, metalMaterial);
+            CreateMainConveyorGuideRail(parent, "Right Narrow Guide Rail", 0.28f, metalMaterial);
             CreateCube(parent, "Narrow Conveyor Support", new Vector3(0f, 0.2f, 0.55f), new Vector3(0.68f, 0.15f, 10.9f), metalMaterial);
 
             CreateInfeedTransferConveyor(parent, beltMaterial, metalMaterial, slatMaterial, ribMaterial);
             CreateHorizontalNeckSupportRail(parent, "Infeed Neck Support Rail", InfeedTurntableBottleCenter.x + 0.65f, StarWheelPocketPosition(0, FillingStarWheelBottleCenter.y).x, FillingStarWheelBottleCenter.z, 1.64f, 1.41f, metalMaterial, true, false);
             CreateAirBlower(parent, metalMaterial, sensorMaterial);
             // Outfeed neck support rail is disabled while the star wheel exit rail is being redesigned.
+        }
+
+        private void CreateMainConveyorGuideRail(Transform parent, string name, float x, Material metalMaterial)
+        {
+            const float conveyorMinZ = -4.8f;
+            const float conveyorMaxZ = 5.9f;
+            const float pusherGapCenterZ = 1.15f;
+            const float pusherGapLength = 0.92f;
+            var gapStartZ = pusherGapCenterZ - pusherGapLength * 0.5f;
+            var gapEndZ = pusherGapCenterZ + pusherGapLength * 0.5f;
+
+            CreateGuideRailSegment(parent, $"{name} Before Pusher Gap", x, conveyorMinZ, gapStartZ, metalMaterial);
+            CreateGuideRailSegment(parent, $"{name} After Pusher Gap", x, gapEndZ, conveyorMaxZ, metalMaterial);
+        }
+
+        private void CreateGuideRailSegment(Transform parent, string name, float x, float startZ, float endZ, Material material)
+        {
+            var length = Mathf.Max(0.05f, endZ - startZ);
+            var centerZ = (startZ + endZ) * 0.5f;
+            CreateCube(parent, name, new Vector3(x, 0.74f, centerZ), new Vector3(0.035f, 0.1f, length), material);
         }
 
         private void CreateInfeedTransferConveyor(Transform parent, Material beltMaterial, Material metalMaterial, Material slatMaterial, Material ribMaterial)
@@ -620,6 +646,55 @@ namespace ConveyorTwin
             var chute = CreateCube(parent, name, position, new Vector3(0.9f, 0.08f, 1.35f), material);
             chute.transform.rotation = Quaternion.Euler(0f, 0f, zRotation);
             return chute.transform;
+        }
+
+        private (Transform turntable, Transform sensor, Transform inletGate, Transform outletGate, Transform carton, Transform cartonPusher) CreateAccumulationTurntableStation(Transform parent, Material metalMaterial, Material sensorMaterial, Material cartonMaterial)
+        {
+            var turntable = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            turntable.name = "Accumulation Turntable";
+            turntable.transform.SetParent(parent);
+            turntable.transform.position = new Vector3(AccumulationTurntableCenter.x, AccumulationTurntableCenter.y - 0.34f, AccumulationTurntableCenter.z);
+            turntable.transform.localScale = new Vector3(0.92f, 0.08f, 0.92f);
+            turntable.GetComponent<Renderer>().sharedMaterial = metalMaterial;
+
+            const int rimSegments = 24;
+            const float rimRadius = 0.98f;
+            for (var i = 0; i < rimSegments; i++)
+            {
+                var angle = i * Mathf.PI * 2f / rimSegments;
+                var position = new Vector3(
+                    AccumulationTurntableCenter.x + Mathf.Cos(angle) * rimRadius,
+                    AccumulationTurntableCenter.y - 0.04f,
+                    AccumulationTurntableCenter.z + Mathf.Sin(angle) * rimRadius);
+                var rim = CreateCube(parent, "Accumulation Turntable Safety Rim", position, new Vector3(0.25f, 0.28f, 0.04f), metalMaterial);
+                rim.transform.rotation = Quaternion.Euler(0f, -angle * Mathf.Rad2Deg, 0f);
+            }
+
+            var sensor = CreateCube(parent, "Accumulation Inlet Counting Sensor", new Vector3(0f, 0.92f, 3.58f), new Vector3(0.86f, 0.035f, 0.035f), sensorMaterial).transform;
+            CreateCube(parent, "Accumulation Sensor Head Left", new Vector3(-0.46f, 0.96f, 3.58f), new Vector3(0.14f, 0.24f, 0.14f), metalMaterial);
+            CreateCube(parent, "Accumulation Sensor Head Right", new Vector3(0.46f, 0.96f, 3.58f), new Vector3(0.14f, 0.24f, 0.14f), metalMaterial);
+
+            var inletGate = CreateCube(parent, "Accumulation Inlet Gate", new Vector3(0f, 0.93f, 3.86f), new Vector3(0.64f, 0.24f, 0.055f), metalMaterial).transform;
+            var outletGate = CreateCube(parent, "Accumulation Outlet Gate", new Vector3(0.92f, 0.93f, AccumulationTurntableCenter.z), new Vector3(0.055f, 0.24f, 0.64f), metalMaterial).transform;
+
+            CreateCube(parent, "Accumulation Outlet Guide", new Vector3(1.05f, 0.62f, AccumulationTurntableCenter.z), new Vector3(0.5f, 0.06f, 0.72f), metalMaterial);
+            var carton = CreateCartonBox(parent, "Active Carton Box", new Vector3(1.38f, 0.58f, AccumulationTurntableCenter.z), cartonMaterial);
+            var cartonPusher = CreateCube(parent, "Carton Discharge Pusher", new Vector3(0.78f, 0.58f, AccumulationTurntableCenter.z), new Vector3(0.12f, 0.44f, 0.86f), metalMaterial).transform;
+
+            return (turntable.transform, sensor, inletGate, outletGate, carton, cartonPusher);
+        }
+
+        private Transform CreateCartonBox(Transform parent, string name, Vector3 center, Material material)
+        {
+            var cartonRoot = new GameObject(name);
+            cartonRoot.transform.SetParent(parent);
+            cartonRoot.transform.position = center;
+            CreateCube(cartonRoot.transform, "Carton Bottom", center + new Vector3(0f, -0.23f, 0f), new Vector3(0.9f, 0.06f, 0.72f), material);
+            CreateCube(cartonRoot.transform, "Carton Front Wall", center + new Vector3(0f, 0f, -0.36f), new Vector3(0.9f, 0.46f, 0.05f), material);
+            CreateCube(cartonRoot.transform, "Carton Back Wall", center + new Vector3(0f, 0f, 0.36f), new Vector3(0.9f, 0.46f, 0.05f), material);
+            CreateCube(cartonRoot.transform, "Carton Left Wall", center + new Vector3(-0.45f, 0f, 0f), new Vector3(0.05f, 0.46f, 0.72f), material);
+            CreateCube(cartonRoot.transform, "Carton Right Wall", center + new Vector3(0.45f, 0f, 0f), new Vector3(0.05f, 0.46f, 0.72f), material);
+            return cartonRoot.transform;
         }
 
         private BottleProcessState CreateBottleTemplate(Transform parent, Material bottleMaterial, Material waterMaterial, Material capMaterial, Material labelMaterial)
