@@ -40,7 +40,7 @@ Tools > Conveyor Twin > Build Demo Scene
 
 5. Bấm **Play**.
 
-Khi chạy, chai sẽ rơi vào infeed turntable, ra conveyor hẹp dạng slat chain, vào star wheel để fill và đóng nắp, đi qua QC, chai lỗi bị piston đẩy sang reject chute, chai đạt đi tiếp vào accumulation turntable cuối line và được chuyển vào thùng carton theo batch.
+Khi chạy, chai sẽ rơi vào infeed turntable, ra conveyor hẹp dạng slat chain, vào star wheel để fill và đóng nắp, đi qua QC, chai lỗi bị piston đẩy khỏi line rồi ẩn khỏi scene, chai đạt đi tiếp vào accumulation turntable cuối line và được chuyển vào thùng carton theo batch.
 
 ## 1. Bottle Infeed Station
 
@@ -160,14 +160,15 @@ Thiết bị:
 
 ```text
 Pneumatic Pusher
-Reject Chute
+Rejected Bottle Removal
 ```
 
 Logic vận hành:
 
 - Chai `PASSED` tiếp tục chạy thẳng đến cuối conveyor.
 - Chai `REJECTED` khi đến vị trí piston sẽ gọi logic `TriggerPusher()`.
-- Piston đỏ lao ra qua phần rail đã khoét, đẩy chai lỗi sang `Reject Chute`, sau đó co về.
+- Piston đỏ lao ra qua phần rail đã khoét, chai lỗi được ẩn khỏi scene ngay sau cú đẩy, sau đó piston co về.
+- Không tạo `Reject Chute` trong scene.
 
 Digital Twin Data:
 
@@ -185,6 +186,8 @@ Outlet Gate
 Carton Box
 Carton Discharge Pusher
 ```
+
+`Accumulation Turntable` uses the same geometry and dimensions as `Infeed Turntable`; only its station position and process role are different.
 
 Logic vận hành:
 

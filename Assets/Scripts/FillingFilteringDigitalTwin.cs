@@ -31,7 +31,6 @@ namespace ConveyorTwin
         public List<Transform> capMagazineCaps = new List<Transform>();
         public Transform pneumaticPusher;
         public Transform acceptChute;
-        public Transform rejectChute;
         public Transform accumulationTurntable;
         public Transform accumulationSensorBeam;
         public Transform accumulationInletGate;
@@ -657,6 +656,18 @@ namespace ConveyorTwin
                     continue;
                 }
 
+                if (bottle.status == BottleQualityStatus.Capped && !CanAcceptBottleIntoAccumulation())
+                {
+                    var accumulationHoldZ = accumulationSensorZ - ConveyorBottleSpacingM * 0.45f;
+                    if (position.z >= accumulationHoldZ)
+                    {
+                        // Hold at the gate; never pull a bottle backwards when the buffer is full.
+                        position.z = Mathf.Max(position.z, accumulationHoldZ);
+                        bottle.transform.position = position;
+                        continue;
+                    }
+                }
+
                 var onInfeedNeckRail = !bottle.fillingCompleted &&
                     !fillingSlotAssignments.ContainsKey(bottle) &&
                     Mathf.Abs(position.z - neckRailZ) < 0.25f;
@@ -707,23 +718,6 @@ namespace ConveyorTwin
                     continue;
                 }
 
-                if (bottle.status == BottleQualityStatus.Passed && !bottle.cappingCompleted)
-                {
-                    if (!bottle.capPlaced && position.z >= capDropZ)
-                    {
-                        StartCoroutine(DropCapOnBottle(bottle));
-                    }
-
-                    if (bottle.capPlaced && position.z >= capTightenZ)
-                    {
-                        if (!cappingStationBusy && !cappingBottles.Contains(bottle))
-                        {
-                            StartCoroutine(TightenCapForBottle(bottle));
-                            continue;
-                        }
-                    }
-                }
-
                 if (bottle.status == BottleQualityStatus.Capped && position.z >= accumulationSensorZ)
                 {
                     if (CanAcceptBottleIntoAccumulation())
@@ -732,7 +726,7 @@ namespace ConveyorTwin
                     }
                     else
                     {
-                        position.z = accumulationSensorZ - ConveyorBottleSpacingM * 0.45f;
+                        position.z = Mathf.Max(position.z, accumulationSensorZ - ConveyorBottleSpacingM * 0.45f);
                         bottle.transform.position = position;
                     }
 
@@ -848,7 +842,8 @@ namespace ConveyorTwin
 
         private float KeepBottleSpacing(BottleProcessState currentBottle, float candidateZ)
         {
-            var resolvedZ = candidateZ;
+            var currentZ = currentBottle != null ? currentBottle.transform.position.z : candidateZ;
+            var resolvedZ = Mathf.Max(candidateZ, currentZ);
             for (var guard = 0; guard < lineBottles.Count; guard++)
             {
                 var nearestAheadZ = float.PositiveInfinity;
@@ -877,10 +872,10 @@ namespace ConveyorTwin
                     return resolvedZ;
                 }
 
-                resolvedZ = spacedZ;
+                resolvedZ = Mathf.Max(currentZ, spacedZ);
             }
 
-            return resolvedZ;
+            return Mathf.Max(currentZ, resolvedZ);
         }
 
         private bool IsConveyorStopped()
@@ -1248,7 +1243,7 @@ namespace ConveyorTwin
                     continue;
                 }
 
-                if (pocketIndex >= capDropPocketIndex && !bottle.capPlaced)
+                if (pocketIndex == capDropPocketIndex && !bottle.capPlaced)
                 {
                     yield return DropCapOnBottle(bottle);
                 }
@@ -1660,7 +1655,7 @@ namespace ConveyorTwin
 
         private Vector3 CappingSlotPosition(int slotIndex)
         {
-            return new Vector3(lineX, starWheelCenter.y, cappingFirstZ + slotIndex * cappingPitchM);
+            return StarWheelSlotPosition(cappingPocketStartIndex + slotIndex);
         }
 
         private float FillingSlotAngleDegrees(int slotIndex)
@@ -1837,13 +1832,13 @@ namespace ConveyorTwin
                 }
 
                 var targetSlot = entry.Value + slotDelta;
+                var currentSlot = Mathf.Lerp(entry.Value, targetSlot, ratio);
+                ApplyStarWheelOperationAtSlot(bottle, currentSlot);
                 if (targetSlot < FillingExitPocketIndex)
                 {
                     continue;
                 }
 
-                var currentSlot = Mathf.Lerp(entry.Value, targetSlot, ratio);
-                ApplyStarWheelOperationAtSlot(bottle, currentSlot);
                 if (currentSlot >= releaseThresholdSlot && bottle.cappingCompleted)
                 {
                     bottlesToRelease.Add(new KeyValuePair<BottleProcessState, float>(bottle, currentSlot));
@@ -2127,6 +2122,7 @@ namespace ConveyorTwin
             }
 
             var activeHeads = GetActiveCappingHeads();
+            AlignCappingHeadsToStarWheelPockets(activeHeads);
             var basePositions = GetTransformPositions(activeHeads);
             var downPositions = OffsetPositions(basePositions, Vector3.down * (capperStrokeM * 0.65f));
             yield return MoveAndSpinCappingHeads(activeHeads, basePositions, downPositions, capperMoveSeconds, 540f);
@@ -2170,6 +2166,29 @@ namespace ConveyorTwin
 
             cappingStationBusy = false;
             CappingActive = false;
+        }
+
+        private void AlignCappingHeadsToStarWheelPockets(List<Transform> activeHeads)
+        {
+            if (activeHeads == null)
+            {
+                return;
+            }
+
+            for (var i = 0; i < activeHeads.Count; i++)
+            {
+                var head = activeHeads[i];
+                if (head == null)
+                {
+                    continue;
+                }
+
+                var pocketPosition = StarWheelSlotPosition(cappingPocketStartIndex + i);
+                var position = head.position;
+                position.x = pocketPosition.x;
+                position.z = pocketPosition.z;
+                head.position = position;
+            }
         }
 
         private IEnumerator MoveAndSpinCappingHeads(List<Transform> activeHeads, Vector3[] from, Vector3[] to, float duration, float totalSpinDegrees)
@@ -2415,7 +2434,8 @@ namespace ConveyorTwin
             }
 
             AccumulationEntryCount++;
-            var start = new Vector3(lineX, bottle.transform.position.y, accumulationSensorZ);
+            var start = bottle.transform.position;
+            start.x = lineX;
             var target = AccumulationBottlePosition(accumulationBottles.Count);
             bottle.transform.position = start;
             yield return MoveBottleToChute(bottle, start, target, 0.5f, 0.1f);
@@ -2610,15 +2630,10 @@ namespace ConveyorTwin
             var extendedPosition = basePosition + new Vector3(-0.65f, 0f, 0f);
 
             yield return MovePusher(basePosition, extendedPosition, 0.18f);
-            var rejectStart = bottle.transform.position;
-            var rejectEnd = rejectChute != null
-                ? rejectChute.position + new Vector3(-0.26f, 0.18f, 0.04f)
-                : rejectStart + new Vector3(-1.1f, -0.1f, 0f);
-            yield return MoveBottleToChute(bottle, rejectStart, rejectEnd, 0.42f, 0.08f);
-
             bottle.status = BottleQualityStatus.RejectedBin;
             bottle.RefreshVisuals();
             CountBottle(bottle, false);
+            bottle.gameObject.SetActive(false);
             yield return MovePusher(extendedPosition, basePosition, 0.22f);
 
             pushingBottles.Remove(bottle);

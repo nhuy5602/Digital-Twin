@@ -65,7 +65,8 @@ namespace ConveyorTwin
 
             CreateFloor(root.transform, floorMaterial);
             CreateConveyor(root.transform, beltMaterial, metalMaterial, slatMaterial, ribMaterial, sensorMaterial);
-            var turntable = CreateTurntable(root.transform, metalMaterial);
+            var turntableParts = CreateTurntable(root.transform, metalMaterial);
+            var turntable = turntableParts.turntable;
             var bottleSpawnPoint = CreateBottleDropper(root.transform, metalMaterial);
             var turntableOutlet = CreateTurntableOutlet(root.transform, metalMaterial);
             var vesselParts = CreateLiquidVessel(root.transform, metalMaterial, waterMaterial);
@@ -76,7 +77,6 @@ namespace ConveyorTwin
             var qcBeam = CreateQcSensor(root.transform, sensorMaterial, metalMaterial);
             var cappingStation = CreateCappingStation(root.transform, metalMaterial, capMaterial, capTubeMaterial, sensorMaterial);
             var pusher = CreatePusher(root.transform, metalMaterial, rejectMaterial);
-            var rejectChute = CreateChute(root.transform, "Reject Chute", new Vector3(-1.15f, 0.35f, 1.25f), rejectMaterial, -25f);
             var accumulationStation = CreateAccumulationTurntableStation(root.transform, metalMaterial, sensorMaterial, cartonMaterial);
             var bottleTemplate = CreateBottleTemplate(root.transform, bottleMaterial, waterMaterial, capMaterial, labelMaterial);
 
@@ -100,7 +100,6 @@ namespace ConveyorTwin
             process.capSensorBeam = cappingStation.sensor;
             process.capMagazineCaps = cappingStation.magazineCaps;
             process.pneumaticPusher = pusher;
-            process.rejectChute = rejectChute;
             process.accumulationTurntable = accumulationStation.turntable;
             process.accumulationSensorBeam = accumulationStation.sensor;
             process.accumulationInletGate = accumulationStation.inletGate;
@@ -474,12 +473,17 @@ namespace ConveyorTwin
             }
         }
 
-        private Transform CreateTurntable(Transform parent, Material material)
+        private (Transform turntable, Transform outletGate) CreateTurntable(Transform parent, Material material)
+        {
+            return CreateTurntableVisual(parent, material, InfeedTurntableBottleCenter, "Infeed");
+        }
+
+        private (Transform turntable, Transform outletGate) CreateTurntableVisual(Transform parent, Material material, Vector3 bottleCenter, string namePrefix)
         {
             var table = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-            table.name = "Infeed Turntable";
+            table.name = $"{namePrefix} Turntable";
             table.transform.SetParent(parent);
-            table.transform.position = new Vector3(InfeedTurntableBottleCenter.x, InfeedTurntableBottleCenter.y - 0.34f, InfeedTurntableBottleCenter.z);
+            table.transform.position = new Vector3(bottleCenter.x, bottleCenter.y - 0.34f, bottleCenter.z);
             table.transform.localScale = new Vector3(1.9f, 0.08f, 1.9f);
             table.GetComponent<Renderer>().sharedMaterial = material;
 
@@ -498,15 +502,15 @@ namespace ConveyorTwin
 
                 var angleRad = angleDegrees * Mathf.Deg2Rad;
                 var position = new Vector3(
-                    InfeedTurntableBottleCenter.x + Mathf.Cos(angleRad) * rimRadius,
-                    InfeedTurntableBottleCenter.y - 0.04f,
-                    InfeedTurntableBottleCenter.z + Mathf.Sin(angleRad) * rimRadius);
-                var rim = CreateCube(parent, "Turntable Safety Rim", position, new Vector3(segmentWidth, 0.34f, 0.04f), material);
+                    bottleCenter.x + Mathf.Cos(angleRad) * rimRadius,
+                    bottleCenter.y - 0.04f,
+                    bottleCenter.z + Mathf.Sin(angleRad) * rimRadius);
+                var rim = CreateCube(parent, $"{namePrefix} Turntable Safety Rim", position, new Vector3(segmentWidth, 0.34f, 0.04f), material);
                 rim.transform.rotation = Quaternion.Euler(0f, -angleDegrees + 90f, 0f);
             }
 
-            CreateCube(parent, "Turntable Outlet Gate", new Vector3(InfeedTurntableBottleCenter.x + 1.18f, InfeedTurntableBottleCenter.y - 0.04f, InfeedTurntableBottleCenter.z), new Vector3(0.08f, 0.26f, 0.55f), material);
-            return table.transform;
+            var outletGate = CreateCube(parent, $"{namePrefix} Turntable Outlet Gate", new Vector3(bottleCenter.x + 1.18f, bottleCenter.y - 0.04f, bottleCenter.z), new Vector3(0.08f, 0.26f, 0.55f), material).transform;
+            return (table.transform, outletGate);
         }
 
         private Transform CreateBottleDropper(Transform parent, Material material)
@@ -641,47 +645,20 @@ namespace ConveyorTwin
             return CreateCube(parent, "Pneumatic Pusher", new Vector3(0.43f, 0.78f, 0.85f), new Vector3(0.1f, 0.32f, 0.42f), rejectMaterial).transform;
         }
 
-        private Transform CreateChute(Transform parent, string name, Vector3 position, Material material, float zRotation)
-        {
-            var chute = CreateCube(parent, name, position, new Vector3(0.9f, 0.08f, 1.35f), material);
-            chute.transform.rotation = Quaternion.Euler(0f, 0f, zRotation);
-            return chute.transform;
-        }
-
         private (Transform turntable, Transform sensor, Transform inletGate, Transform outletGate, Transform carton, Transform cartonPusher) CreateAccumulationTurntableStation(Transform parent, Material metalMaterial, Material sensorMaterial, Material cartonMaterial)
         {
-            var turntable = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-            turntable.name = "Accumulation Turntable";
-            turntable.transform.SetParent(parent);
-            turntable.transform.position = new Vector3(AccumulationTurntableCenter.x, AccumulationTurntableCenter.y - 0.34f, AccumulationTurntableCenter.z);
-            turntable.transform.localScale = new Vector3(0.92f, 0.08f, 0.92f);
-            turntable.GetComponent<Renderer>().sharedMaterial = metalMaterial;
-
-            const int rimSegments = 24;
-            const float rimRadius = 0.98f;
-            for (var i = 0; i < rimSegments; i++)
-            {
-                var angle = i * Mathf.PI * 2f / rimSegments;
-                var position = new Vector3(
-                    AccumulationTurntableCenter.x + Mathf.Cos(angle) * rimRadius,
-                    AccumulationTurntableCenter.y - 0.04f,
-                    AccumulationTurntableCenter.z + Mathf.Sin(angle) * rimRadius);
-                var rim = CreateCube(parent, "Accumulation Turntable Safety Rim", position, new Vector3(0.25f, 0.28f, 0.04f), metalMaterial);
-                rim.transform.rotation = Quaternion.Euler(0f, -angle * Mathf.Rad2Deg, 0f);
-            }
+            var turntableParts = CreateTurntableVisual(parent, metalMaterial, AccumulationTurntableCenter, "Accumulation");
 
             var sensor = CreateCube(parent, "Accumulation Inlet Counting Sensor", new Vector3(0f, 0.92f, 3.58f), new Vector3(0.86f, 0.035f, 0.035f), sensorMaterial).transform;
             CreateCube(parent, "Accumulation Sensor Head Left", new Vector3(-0.46f, 0.96f, 3.58f), new Vector3(0.14f, 0.24f, 0.14f), metalMaterial);
             CreateCube(parent, "Accumulation Sensor Head Right", new Vector3(0.46f, 0.96f, 3.58f), new Vector3(0.14f, 0.24f, 0.14f), metalMaterial);
 
             var inletGate = CreateCube(parent, "Accumulation Inlet Gate", new Vector3(0f, 0.93f, 3.86f), new Vector3(0.64f, 0.24f, 0.055f), metalMaterial).transform;
-            var outletGate = CreateCube(parent, "Accumulation Outlet Gate", new Vector3(0.92f, 0.93f, AccumulationTurntableCenter.z), new Vector3(0.055f, 0.24f, 0.64f), metalMaterial).transform;
-
             CreateCube(parent, "Accumulation Outlet Guide", new Vector3(1.05f, 0.62f, AccumulationTurntableCenter.z), new Vector3(0.5f, 0.06f, 0.72f), metalMaterial);
             var carton = CreateCartonBox(parent, "Active Carton Box", new Vector3(1.38f, 0.58f, AccumulationTurntableCenter.z), cartonMaterial);
             var cartonPusher = CreateCube(parent, "Carton Discharge Pusher", new Vector3(0.78f, 0.58f, AccumulationTurntableCenter.z), new Vector3(0.12f, 0.44f, 0.86f), metalMaterial).transform;
 
-            return (turntable.transform, sensor, inletGate, outletGate, carton, cartonPusher);
+            return (turntableParts.turntable, sensor, inletGate, turntableParts.outletGate, carton, cartonPusher);
         }
 
         private Transform CreateCartonBox(Transform parent, string name, Vector3 center, Material material)
