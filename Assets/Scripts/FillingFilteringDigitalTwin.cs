@@ -83,6 +83,7 @@ namespace ConveyorTwin
         public int capMagazineCapacity = 5;
         public int capDropPocketIndex = 5;
         public int cappingPocketStartIndex = 7;
+        public float cappingSpeedMultiplier = 10f;
 
         [Header("Slat chain conveyor")]
         public float slatPitchM = 0.22f;
@@ -115,6 +116,9 @@ namespace ConveyorTwin
         public float accumulationSensorZ = 3.68f;
         public int accumulationBatchSize = 6;
         public float accumulationTransferSeconds = 0.34f;
+        [Range(0.01f, 1f)] public float accumulationCentrifugalEfficiency = 0.22f;
+        public float accumulationMaximumRadialSpeedMps = 0.28f;
+        public int accumulationTableCapacity = 10;
         public Vector3 cartonLoadPosition = new Vector3(1.38f, 0.58f, 4.78f);
         public Vector3 cartonExitPosition = new Vector3(2.45f, 0.58f, 5.13f);
 
@@ -165,6 +169,10 @@ namespace ConveyorTwin
         private int StarWheelIndexStepPockets => Mathf.Clamp(starWheelIndexStepPockets, 1, Mathf.Max(1, starWheelPocketCount));
         private int StarWheelFeedBatchSize => Mathf.Clamp(Mathf.Min(StarWheelIndexStepPockets, ActiveFillingNozzleCount), 1, Mathf.Max(1, starWheelPocketCount));
         private int FillingExitPocketIndex => Mathf.Max(0, starWheelPocketCount - 1);
+        private float StarWheelAngularSpeedDegreesPerSecond => StarWheelStepAngleDegrees / Mathf.Max(0.05f, starWheelIndexDurationSeconds);
+        private float CappingHeadAngularSpeedDegreesPerSecond => StarWheelAngularSpeedDegreesPerSecond * Mathf.Max(1f, cappingSpeedMultiplier);
+        private float AccumulationAngularSpeedRadPerSec => infeedMotorSpeedRpm * 4.2f * Mathf.Deg2Rad;
+        private float AccumulationExitRadius => Mathf.Max(0.35f, accumulationTurntableRadius - turntableBottleRadius * 0.4f);
         private float InfeedRailBottleSpacingM => Mathf.Max(0.18f, turntableBottleRadius * 1.7f);
         private float InfeedRailCaptureZoneM => Mathf.Max(0.45f, InfeedRailBottleSpacingM * StarWheelIndexStepPockets);
         public bool CappingActive { get; private set; }
@@ -173,6 +181,7 @@ namespace ConveyorTwin
         public bool ConveyorStoppedForCapping { get; private set; }
         public int AccumulationBufferCount { get; private set; }
         public int AccumulationEntryCount { get; private set; }
+        public int CartonBottleCount => cartonBottles.Count;
         public int CartonsFilled { get; private set; }
         public bool AccumulationInletClosed { get; private set; }
         public bool AccumulationOutletOpen { get; private set; }
@@ -185,6 +194,10 @@ namespace ConveyorTwin
         private readonly Queue<BottleProcessState> starWheelReleaseQueue = new Queue<BottleProcessState>();
         private readonly HashSet<BottleProcessState> queuedStarWheelReleaseBottles = new HashSet<BottleProcessState>();
         private readonly List<BottleProcessState> accumulationBottles = new List<BottleProcessState>();
+        private readonly List<BottleProcessState> cartonBottles = new List<BottleProcessState>();
+        private readonly Dictionary<BottleProcessState, float> accumulationBottleRadii = new Dictionary<BottleProcessState, float>();
+        private readonly Dictionary<BottleProcessState, float> accumulationBottleAngles = new Dictionary<BottleProcessState, float>();
+        private readonly Dictionary<BottleProcessState, float> accumulationBottleRadialSpeeds = new Dictionary<BottleProcessState, float>();
         private readonly HashSet<BottleProcessState> releasingBottles = new HashSet<BottleProcessState>();
         private readonly HashSet<BottleProcessState> cappingBottles = new HashSet<BottleProcessState>();
         private readonly HashSet<BottleProcessState> pushingBottles = new HashSet<BottleProcessState>();
@@ -207,6 +220,7 @@ namespace ConveyorTwin
         private bool outletOccupied;
         private bool starWheelReleaseQueueRunning;
         private bool accumulationLoadingOut;
+        private int cartonBottleReservations;
         private bool initializedTurntable;
         private int starWheelIndex;
         private int capMagazineVisibleCount;
@@ -1257,12 +1271,11 @@ namespace ConveyorTwin
                 }
             }
 
-            var requiredCappingBatchSize = Mathf.Min(ActiveFillingNozzleCount, ActiveCappingHeadCount);
-            if (cappingTargets.Count >= requiredCappingBatchSize)
+            if (cappingTargets.Count > 0)
             {
                 cappingTargets.Sort((left, right) => left.Value.CompareTo(right.Value));
                 var batch = new List<BottleProcessState>();
-                for (var i = 0; i < requiredCappingBatchSize; i++)
+                for (var i = 0; i < cappingTargets.Count; i++)
                 {
                     batch.Add(cappingTargets[i].Key);
                 }
@@ -2112,49 +2125,54 @@ namespace ConveyorTwin
 
             cappingStationBusy = true;
             CappingActive = true;
-            foreach (var bottle in batch)
-            {
-                if (bottle != null)
-                {
-                    cappingBottles.Add(bottle);
-                    SnapBottleToFillingSlot(bottle);
-                }
-            }
-
             var activeHeads = GetActiveCappingHeads();
-            AlignCappingHeadsToStarWheelPockets(activeHeads);
-            var basePositions = GetTransformPositions(activeHeads);
-            var downPositions = OffsetPositions(basePositions, Vector3.down * (capperStrokeM * 0.65f));
-            yield return MoveAndSpinCappingHeads(activeHeads, basePositions, downPositions, capperMoveSeconds, 540f);
-
-            var spinTime = Mathf.Max(0.08f, cappingTimeSeconds * 0.35f);
-            var elapsed = 0f;
-            while (elapsed < spinTime)
+            if (activeHeads.Count == 0)
             {
-                elapsed += Time.deltaTime;
-                foreach (var bottle in batch)
-                {
-                    SnapBottleToFillingSlot(bottle);
-                }
-
-                SpinCappingHeadTools(activeHeads, 1800f);
-                yield return null;
+                cappingStationBusy = false;
+                CappingActive = false;
+                yield break;
             }
 
-            foreach (var bottle in batch)
+            AlignCappingHeadsToStarWheelPockets(activeHeads);
+            for (var batchIndex = 0; batchIndex < batch.Count; batchIndex++)
             {
-                if (bottle == null)
+                var bottle = batch[batchIndex];
+                if (bottle == null || !fillingSlotAssignments.ContainsKey(bottle))
                 {
                     continue;
+                }
+
+                cappingBottles.Add(bottle);
+                SnapBottleToFillingSlot(bottle);
+
+                var pocketPosition = StarWheelSlotPosition(fillingSlotAssignments[bottle]);
+                var headBasePosition = activeHeads[0].position;
+                var targetHeadPosition = new Vector3(pocketPosition.x, headBasePosition.y, pocketPosition.z);
+                var targetPositions = new[] { targetHeadPosition };
+                yield return MoveCappingHeads(activeHeads, new[] { headBasePosition }, targetPositions, capperMoveSeconds);
+
+                var basePositions = GetTransformPositions(activeHeads);
+                var downPositions = OffsetPositions(basePositions, Vector3.down * (capperStrokeM * 0.65f));
+                yield return MoveAndSpinCappingHeads(activeHeads, basePositions, downPositions, capperMoveSeconds, 360f);
+
+                var spinTime = Mathf.Max(0.05f, cappingTimeSeconds);
+                var elapsed = 0f;
+                while (elapsed < spinTime)
+                {
+                    elapsed += Time.deltaTime;
+                    SnapBottleToFillingSlot(bottle);
+                    SpinCappingHeadTools(activeHeads, CappingHeadAngularSpeedDegreesPerSecond);
+                    yield return null;
                 }
 
                 bottle.capPlaced = true;
                 bottle.cappingCompleted = true;
                 bottle.status = BottleQualityStatus.Capped;
                 bottle.RefreshVisuals();
-            }
 
-            yield return MoveCappingHeads(activeHeads, downPositions, basePositions, capperMoveSeconds);
+                yield return MoveCappingHeads(activeHeads, downPositions, basePositions, capperMoveSeconds);
+                cappingBottles.Remove(bottle);
+            }
 
             foreach (var bottle in batch)
             {
@@ -2423,7 +2441,9 @@ namespace ConveyorTwin
 
         private bool CanAcceptBottleIntoAccumulation()
         {
-            return !accumulationLoadingOut && accumulationBottles.Count < accumulationBatchSize;
+            return !accumulationLoadingOut &&
+                cartonBottles.Count + cartonBottleReservations < accumulationBatchSize &&
+                accumulationBottles.Count < Mathf.Max(accumulationBatchSize, accumulationTableCapacity);
         }
 
         private IEnumerator MoveBottleIntoAccumulationTurntable(BottleProcessState bottle)
@@ -2436,27 +2456,26 @@ namespace ConveyorTwin
             AccumulationEntryCount++;
             var start = bottle.transform.position;
             start.x = lineX;
-            var target = AccumulationBottlePosition(accumulationBottles.Count);
+            var target = AccumulationBottleEntryPosition(accumulationBottles.Count);
             bottle.transform.position = start;
             yield return MoveBottleToChute(bottle, start, target, 0.5f, 0.1f);
 
             bottle.status = BottleQualityStatus.AcceptedBin;
             bottle.RefreshVisuals();
             accumulationBottles.Add(bottle);
-            CountBottle(bottle, true);
+            lineBottles.Remove(bottle);
+            var entryAngleDegrees = -90f + (accumulationBottles.Count - 1) % 4 * 8f;
+            var entryRadius = 0.2f + ((accumulationBottles.Count - 1) % 2) * 0.05f;
+            accumulationBottleAngles[bottle] = entryAngleDegrees * Mathf.Deg2Rad;
+            accumulationBottleRadii[bottle] = entryRadius;
+            accumulationBottleRadialSpeeds[bottle] = 0f;
             sortingBottles.Remove(bottle);
-
-            if (accumulationBottles.Count >= accumulationBatchSize && !accumulationLoadingOut)
-            {
-                StartCoroutine(UnloadAccumulationTurntableToCarton());
-            }
         }
 
-        private Vector3 AccumulationBottlePosition(int index)
+        private Vector3 AccumulationBottleEntryPosition(int index)
         {
-            var ringCount = Mathf.Max(1, accumulationBatchSize);
-            var angle = (index * Mathf.PI * 2f / ringCount) + Mathf.PI * 0.18f;
-            var radius = Mathf.Lerp(0.24f, Mathf.Max(0.25f, accumulationTurntableRadius - 0.22f), (index % ringCount) / Mathf.Max(1f, ringCount - 1f));
+            var angle = (-90f + index % 4 * 8f) * Mathf.Deg2Rad;
+            var radius = 0.2f + (index % 2) * 0.05f;
             return new Vector3(
                 accumulationTurntableCenter.x + Mathf.Cos(angle) * radius,
                 accumulationTurntableCenter.y,
@@ -2470,48 +2489,99 @@ namespace ConveyorTwin
                 return;
             }
 
-            var deltaAngle = infeedMotorSpeedRpm * 3.4f * Mathf.Deg2Rad * Time.deltaTime;
-            var sin = Mathf.Sin(deltaAngle);
-            var cos = Mathf.Cos(deltaAngle);
-            foreach (var bottle in accumulationBottles)
+            var deltaTime = Time.deltaTime;
+            var deltaAngle = AccumulationAngularSpeedRadPerSec * deltaTime;
+            var angularSpeed = Mathf.Abs(AccumulationAngularSpeedRadPerSec);
+            foreach (var bottle in new List<BottleProcessState>(accumulationBottles))
             {
                 if (bottle == null || sortingBottles.Contains(bottle))
                 {
                     continue;
                 }
 
-                var offset = bottle.transform.position - accumulationTurntableCenter;
-                var x = offset.x * cos - offset.z * sin;
-                var z = offset.x * sin + offset.z * cos;
-                bottle.transform.position = new Vector3(accumulationTurntableCenter.x + x, accumulationTurntableCenter.y, accumulationTurntableCenter.z + z);
+                if (!accumulationBottleRadii.TryGetValue(bottle, out var radius) ||
+                    !accumulationBottleAngles.TryGetValue(bottle, out var angle) ||
+                    !accumulationBottleRadialSpeeds.TryGetValue(bottle, out var radialSpeed))
+                {
+                    continue;
+                }
+
+                var centrifugalAcceleration = angularSpeed * angularSpeed * Mathf.Max(0.05f, radius);
+                radialSpeed += centrifugalAcceleration * accumulationCentrifugalEfficiency * deltaTime;
+                radialSpeed = Mathf.Min(radialSpeed, Mathf.Max(0.01f, accumulationMaximumRadialSpeedMps));
+                radius = Mathf.Min(AccumulationExitRadius, radius + radialSpeed * deltaTime);
+                angle = Mathf.Repeat(angle + deltaAngle, Mathf.PI * 2f);
+
+                accumulationBottleRadii[bottle] = radius;
+                accumulationBottleAngles[bottle] = angle;
+                accumulationBottleRadialSpeeds[bottle] = radialSpeed;
+                bottle.transform.position = new Vector3(
+                    accumulationTurntableCenter.x + Mathf.Cos(angle) * radius,
+                    accumulationTurntableCenter.y,
+                    accumulationTurntableCenter.z + Mathf.Sin(angle) * radius);
+
+                if (radius >= AccumulationExitRadius - 0.001f &&
+                    IsAccumulationOutletAngle(angle) &&
+                    sortingBottles.Add(bottle))
+                {
+                    StartCoroutine(DropAccumulationBottleIntoCarton(bottle));
+                }
             }
         }
 
-        private IEnumerator UnloadAccumulationTurntableToCarton()
+        private bool IsAccumulationOutletAngle(float angle)
+        {
+            var angleDegrees = angle * Mathf.Rad2Deg;
+            return Mathf.Abs(Mathf.DeltaAngle(angleDegrees, 0f)) <= 24f;
+        }
+
+        private IEnumerator DropAccumulationBottleIntoCarton(BottleProcessState bottle)
+        {
+            if (bottle == null)
+            {
+                yield break;
+            }
+
+            var slotIndex = cartonBottles.Count + cartonBottleReservations;
+            if (slotIndex >= accumulationBatchSize)
+            {
+                sortingBottles.Remove(bottle);
+                yield break;
+            }
+
+            cartonBottleReservations++;
+            var start = bottle.transform.position;
+            var target = CartonBottleSlot(slotIndex);
+            yield return MoveBottleToChute(bottle, start, target, accumulationTransferSeconds, 0.08f);
+
+            cartonBottleReservations = Mathf.Max(0, cartonBottleReservations - 1);
+            accumulationBottles.Remove(bottle);
+            accumulationBottleRadii.Remove(bottle);
+            accumulationBottleAngles.Remove(bottle);
+            accumulationBottleRadialSpeeds.Remove(bottle);
+            cartonBottles.Add(bottle);
+            bottle.status = BottleQualityStatus.AcceptedBin;
+            bottle.RefreshVisuals();
+            CountBottle(bottle, true);
+            sortingBottles.Remove(bottle);
+
+            if (cartonBottles.Count >= accumulationBatchSize && !accumulationLoadingOut)
+            {
+                StartCoroutine(DischargeFullCarton());
+            }
+        }
+
+        private IEnumerator DischargeFullCarton()
         {
             accumulationLoadingOut = true;
             AccumulationInletClosed = true;
             AccumulationOutletOpen = true;
             UpdateAccumulationGateVisuals();
 
-            var batch = new List<BottleProcessState>(accumulationBottles);
-            accumulationBottles.Clear();
-            yield return new WaitForSeconds(0.2f);
-
-            for (var i = 0; i < batch.Count; i++)
-            {
-                var bottle = batch[i];
-                if (bottle == null)
-                {
-                    continue;
-                }
-
-                var target = CartonBottleSlot(i);
-                yield return MoveBottleToChute(bottle, bottle.transform.position, target, accumulationTransferSeconds, 0.08f);
-            }
-
+            var batch = new List<BottleProcessState>(cartonBottles);
             yield return MoveCartonAway(batch);
 
+            cartonBottles.Clear();
             CartonsFilled++;
             AccumulationInletClosed = false;
             AccumulationOutletOpen = false;

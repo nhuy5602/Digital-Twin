@@ -101,7 +101,7 @@ Thiết bị:
 3 x Filling Nozzle
 Liquid Vessel
 Cap Dropper
-3 x Rotary Capping Head
+1 x Rotary Capping Head
 ```
 
 Logic vận hành:
@@ -119,7 +119,8 @@ pocketPitch = 2 * pi * starWheelPocketRadius / 10
 - Khi batch đủ chai dưới vòi, hệ thống kích hoạt dòng chảy `Liquid Flow`.
 - 90% chai được rót chuẩn `100%`, 10% chai bị underfilled `50-60%` để mô phỏng lỗi nghẹt vòi.
 - Sau vùng fill, nắp được cấp bằng `Cap Dropper`.
-- Trong phần sau của star wheel, 3 `Rotary Capping Head` hạ xuống và xoay để đóng nắp cho các chai đã fill.
+- Trong phần sau của star wheel, 1 `Rotary Capping Head` di chuyển tới pocket chai và đóng nắp tuần tự.
+- Tốc độ quay đầu đóng nắp được đặt bằng `10x` tốc độ góc của star wheel; hệ thống không chờ đủ 3 chai mới bắt đầu đóng nắp.
 - Hết star wheel, chai rời pocket theo tiếp tuyến và quay lại conveyor thẳng để đi qua QC.
 
 Digital Twin Data:
@@ -194,12 +195,10 @@ Logic vận hành:
 - Chai đạt sau QC đi đến cảm biến trước cổng vào accumulation turntable.
 - Sensor tăng `AccumulationEntryCount` mỗi khi một chai đi vào.
 - Chai được đưa vào `Accumulation Turntable` và xoay tích trữ như một buffer cuối line.
-- Khi buffer đủ `accumulationBatchSize = 6` chai:
-  - `Inlet Gate` đóng để chặn chai mới.
-  - `Outlet Gate` mở.
-  - Chai trong turntable được chuyển lần lượt vào `Active Carton Box`.
-  - `Carton Discharge Pusher` đẩy thùng đầy ra ngoài.
-  - Hệ thống reset thùng rỗng mới và mở lại cổng vào.
+- Chai trong turntable được quay và dạt dần ra ngoài theo lực ly tâm `a_c = omega^2 * r`.
+- Chỉ khi chai đi tới cửa outlet và rơi vào `Active Carton Box` thì mới tăng `Total Passed` và bộ đếm carton.
+- Khi đủ `accumulationBatchSize = 6` chai đã rơi vào thùng, `Inlet Gate` đóng, `Carton Discharge Pusher` đẩy thùng đầy ra ngoài.
+- Hệ thống reset thùng rỗng mới rồi mở lại cổng vào.
 
 Digital Twin Data:
 
@@ -277,12 +276,14 @@ Logic accumulation cuối line:
 
 ```text
 if capped passed bottle reaches accumulation sensor:
-    count bottle
     move bottle into accumulation turntable
-if accumulation count >= batch size:
+while bottle is inside accumulation turntable:
+    rotate turntable
+    radius += centrifugal_acceleration * dt
+    if radius reaches outlet and bottle falls into carton:
+        count passed bottle
+if carton bottle count >= 6:
     close inlet gate
-    open outlet gate
-    transfer bottles into carton
     push full carton away
     reset empty carton
 ```

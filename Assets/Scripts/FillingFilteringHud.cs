@@ -54,9 +54,9 @@ namespace ConveyorTwin
             DrawLine($"   Vessel liquid level: {process.LiquidLevelLiters:0.0} L");
             DrawLine($"   Filling time: {process.LastFillingTimeSeconds:0.00} s");
             DrawLine($"3. Inspection status: {process.InspectionStatus}");
-            DrawLine($"   Capping machine busy: {process.CappingActive} | Conveyor stopped: {process.ConveyorStoppedForCapping}");
-            DrawLine($"4. Accumulation: {process.AccumulationBufferCount}/{process.accumulationBatchSize} bottles | Sensor count: {process.AccumulationEntryCount}");
-            DrawLine($"   Inlet closed: {process.AccumulationInletClosed} | Outlet open: {process.AccumulationOutletOpen} | Cartons: {process.CartonsFilled}");
+            DrawLine($"   Capping machine busy: {process.CappingActive} | Head speed: x{process.cappingSpeedMultiplier:0} starwheel");
+            DrawLine($"4. Accumulation table: {process.AccumulationBufferCount}/{process.accumulationTableCapacity} | Sensor count: {process.AccumulationEntryCount}");
+            DrawLine($"   Carton: {process.CartonBottleCount}/{process.accumulationBatchSize} | Inlet closed: {process.AccumulationInletClosed} | Cartons: {process.CartonsFilled}");
             DrawLine($"5. Total passed: {process.TotalPassed}");
             DrawLine($"   Total rejected: {process.TotalRejected}");
             DrawLine($"Rule: volume >= 95% => PASSED, otherwise REJECTED");
