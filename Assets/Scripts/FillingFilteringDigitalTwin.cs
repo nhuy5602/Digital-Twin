@@ -277,7 +277,7 @@ namespace ConveyorTwin
             {
                 if (!TurntablePaused)
                 {
-                    infeedTurntable.Rotate(Vector3.up, infeedMotorSpeedRpm * 6f * Time.deltaTime, Space.World);
+                    infeedTurntable.Rotate(Vector3.up, -infeedMotorSpeedRpm * 6f * Time.deltaTime, Space.World);
                 }
             }
 

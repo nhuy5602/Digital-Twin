@@ -67,8 +67,8 @@ namespace ConveyorTwin
             CreateConveyor(root.transform, beltMaterial, metalMaterial, slatMaterial, ribMaterial, sensorMaterial);
             var turntableParts = CreateTurntable(root.transform, metalMaterial);
             var turntable = turntableParts.turntable;
-            var bottleSpawnPoint = CreateBottleDropper(root.transform, metalMaterial);
-            var turntableOutlet = CreateTurntableOutlet(root.transform, metalMaterial);
+            var bottleSpawnPoint = CreateBottleDropper(root.transform);
+            var turntableOutlet = CreateTurntableOutlet(root.transform);
             var vesselParts = CreateLiquidVessel(root.transform, metalMaterial, waterMaterial);
             var nozzleParts = CreateFillingNozzles(root.transform, metalMaterial, waterMaterial);
             Transform fillingStopGate = null;
@@ -357,15 +357,15 @@ namespace ConveyorTwin
             var centerX = (startX + endX) * 0.5f;
             var centerY = (startY + endY) * 0.5f;
             var pitchDegrees = Mathf.Atan2(rise, horizontalLength) * Mathf.Rad2Deg;
-
-            var leftRail = CreateCube(parent, $"{namePrefix} Left", new Vector3(centerX, centerY, z - railHalfGap), new Vector3(railWidth, railHeight, length), material);
-            leftRail.transform.rotation = Quaternion.Euler(0f, 90f, pitchDegrees);
-
             var railDirection = Mathf.Sign(endX - startX);
             if (Mathf.Approximately(railDirection, 0f))
             {
                 railDirection = 1f;
             }
+
+            // The rails exchange sides, but retain their original individual lengths.
+            var leftRail = CreateCube(parent, $"{namePrefix} Left", new Vector3(centerX, centerY, z + railHalfGap), new Vector3(railWidth, railHeight, length), material);
+            leftRail.transform.rotation = Quaternion.Euler(0f, 90f, pitchDegrees);
 
             var rightStartX = shortenRightRail ? startX + railDirection * shortRightStartOffset : startX;
             var rightStartRatio = Mathf.InverseLerp(startX, endX, rightStartX);
@@ -375,7 +375,7 @@ namespace ConveyorTwin
             var rightLength = Mathf.Sqrt(rightHorizontalLength * rightHorizontalLength + rightRise * rightRise);
             var rightCenterX = (rightStartX + endX) * 0.5f;
             var rightCenterY = (rightStartY + endY) * 0.5f;
-            var rightRail = CreateCube(parent, $"{namePrefix} Right", new Vector3(rightCenterX, rightCenterY, z + railHalfGap), new Vector3(railWidth, railHeight, rightLength), material);
+            var rightRail = CreateCube(parent, $"{namePrefix} Right", new Vector3(rightCenterX, rightCenterY, z - railHalfGap), new Vector3(railWidth, railHeight, rightLength), material);
             rightRail.transform.rotation = Quaternion.Euler(0f, 90f, pitchDegrees);
 
             if (!createSupports)
@@ -392,10 +392,10 @@ namespace ConveyorTwin
                 var railY = Mathf.Lerp(startY, endY, ratio);
                 var postCenterY = (0.48f + railY) * 0.5f;
                 var postHeight = Mathf.Max(0.1f, railY - 0.48f);
-                CreateCube(parent, $"{namePrefix} Left Support", new Vector3(x, postCenterY, z - 0.18f), new Vector3(0.035f, postHeight, 0.035f), material);
+                CreateCube(parent, $"{namePrefix} Left Support", new Vector3(x, postCenterY, z + 0.18f), new Vector3(0.035f, postHeight, 0.035f), material);
                 if (!shortenRightRail || ratio >= rightStartRatio)
                 {
-                    CreateCube(parent, $"{namePrefix} Right Support", new Vector3(x, postCenterY, z + 0.18f), new Vector3(0.035f, postHeight, 0.035f), material);
+                    CreateCube(parent, $"{namePrefix} Right Support", new Vector3(x, postCenterY, z - 0.18f), new Vector3(0.035f, postHeight, 0.035f), material);
                 }
             }
         }
@@ -456,30 +456,31 @@ namespace ConveyorTwin
         {
             var blowerX = InfeedTurntableBottleCenter.x + 0.85f;
             var blowerZ = FillingStarWheelBottleCenter.z + 0.36f;
-            CreateCube(parent, "Infeed Air Blower Stand", new Vector3(blowerX, 1.04f, blowerZ + 0.28f), new Vector3(0.06f, 1.08f, 0.06f), metalMaterial);
-            CreateCube(parent, "Infeed Air Blower Arm", new Vector3(blowerX, 1.55f, blowerZ + 0.12f), new Vector3(0.055f, 0.055f, 0.52f), metalMaterial);
+            const float blowerLiftM = 0.25f;
+            CreateCube(parent, "Infeed Air Blower Stand", new Vector3(blowerX, 1.04f + blowerLiftM * 0.5f, blowerZ + 0.28f), new Vector3(0.06f, 1.08f + blowerLiftM, 0.06f), metalMaterial);
+            CreateCube(parent, "Infeed Air Blower Arm", new Vector3(blowerX, 1.55f + blowerLiftM, blowerZ + 0.12f), new Vector3(0.055f, 0.055f, 0.52f), metalMaterial);
 
             var blower = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             blower.name = "Infeed Air Blower Nozzle";
             blower.transform.SetParent(parent);
-            blower.transform.position = new Vector3(blowerX, 1.55f, FillingStarWheelBottleCenter.z + 0.11f);
+            blower.transform.position = new Vector3(blowerX, 1.55f + blowerLiftM, FillingStarWheelBottleCenter.z + 0.11f);
             blower.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
             blower.transform.localScale = new Vector3(0.12f, 0.18f, 0.12f);
             blower.GetComponent<Renderer>().sharedMaterial = metalMaterial;
 
             for (var i = 0; i < 4; i++)
             {
-                var gust = CreateCube(parent, $"Infeed Air Jet {i + 1}", new Vector3(blowerX + i * 0.11f, 1.55f, FillingStarWheelBottleCenter.z + 0.05f), new Vector3(0.08f, 0.012f, 0.012f), airMaterial);
+                var gust = CreateCube(parent, $"Infeed Air Jet {i + 1}", new Vector3(blowerX + i * 0.11f, 1.55f + blowerLiftM, FillingStarWheelBottleCenter.z + 0.05f), new Vector3(0.08f, 0.012f, 0.012f), airMaterial);
                 gust.transform.rotation = Quaternion.Euler(0f, 0f, 0f);
             }
         }
 
         private (Transform turntable, Transform outletGate) CreateTurntable(Transform parent, Material material)
         {
-            return CreateTurntableVisual(parent, material, InfeedTurntableBottleCenter, "Infeed");
+            return CreateTurntableVisual(parent, material, InfeedTurntableBottleCenter, "Infeed", false);
         }
 
-        private (Transform turntable, Transform outletGate) CreateTurntableVisual(Transform parent, Material material, Vector3 bottleCenter, string namePrefix)
+        private (Transform turntable, Transform outletGate) CreateTurntableVisual(Transform parent, Material material, Vector3 bottleCenter, string namePrefix, bool createOutletGate = true)
         {
             var table = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             table.name = $"{namePrefix} Turntable";
@@ -490,8 +491,8 @@ namespace ConveyorTwin
 
             const int segments = 120;
             const float rimRadius = 1.08f;
-            const float outletGapStartDegrees = 335f;
-            const float outletGapEndDegrees = 25f;
+            const float outletGapStartDegrees = 350f;
+            const float outletGapEndDegrees = 10f;
             var segmentWidth = (2f * Mathf.PI * rimRadius / segments) * 1.12f;
             for (var i = 0; i < segments; i++)
             {
@@ -510,25 +511,25 @@ namespace ConveyorTwin
                 rim.transform.rotation = Quaternion.Euler(0f, -angleDegrees + 90f, 0f);
             }
 
-            var outletGate = CreateCube(parent, $"{namePrefix} Turntable Outlet Gate", new Vector3(bottleCenter.x + 1.18f, bottleCenter.y - 0.04f, bottleCenter.z), new Vector3(0.08f, 0.26f, 0.55f), material).transform;
+            Transform outletGate = null;
+            if (createOutletGate)
+            {
+                outletGate = CreateCube(parent, $"{namePrefix} Turntable Outlet Gate", new Vector3(bottleCenter.x + 1.18f, bottleCenter.y - 0.04f, bottleCenter.z), new Vector3(0.08f, 0.26f, 0.55f), material).transform;
+            }
+
             return (table.transform, outletGate);
         }
 
-        private Transform CreateBottleDropper(Transform parent, Material material)
+        private Transform CreateBottleDropper(Transform parent)
         {
-            CreateCube(parent, "Bottle Dropper Stand", new Vector3(InfeedTurntableBottleCenter.x + 1.25f, 1.56f, InfeedTurntableBottleCenter.z), new Vector3(0.08f, 1.92f, 0.08f), material);
-            CreateCube(parent, "Bottle Dropper Arm", new Vector3(InfeedTurntableBottleCenter.x + 0.62f, 2.48f, InfeedTurntableBottleCenter.z), new Vector3(1.25f, 0.08f, 0.08f), material);
-
             var spawn = new GameObject("Bottle Spawn Point");
             spawn.transform.SetParent(parent);
             spawn.transform.position = new Vector3(InfeedTurntableBottleCenter.x, 2.68f, InfeedTurntableBottleCenter.z);
             return spawn.transform;
         }
 
-        private Transform CreateTurntableOutlet(Transform parent, Material material)
+        private Transform CreateTurntableOutlet(Transform parent)
         {
-            CreateCube(parent, "Turntable Outlet Guide Left", new Vector3(InfeedTurntableBottleCenter.x + 0.58f, 0.95f, InfeedTurntableBottleCenter.z - 0.32f), new Vector3(0.9f, 0.18f, 0.06f), material);
-
             var outlet = new GameObject("Turntable Outlet");
             outlet.transform.SetParent(parent);
             outlet.transform.position = new Vector3(InfeedTurntableBottleCenter.x + 0.95f, InfeedTurntableBottleCenter.y, InfeedTurntableBottleCenter.z);
