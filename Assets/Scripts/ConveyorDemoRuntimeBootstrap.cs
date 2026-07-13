@@ -38,6 +38,7 @@ namespace ConveyorTwin
         private const int CappingPocketStartIndex = 7;
         private static readonly Vector3 CapMagazineTubePosition = new Vector3(1.44500005f, 2.09599996f, -1.30999994f);
         private static readonly Vector3 CapMagazineTubeEulerAngles = new Vector3(321.961578f, 0f, 0f);
+        private static readonly Vector3 CapMagazineAssemblyLocalOffset = new Vector3(0f, 0.106515377f, -0.136654712f);
         private static readonly Vector3 CapMagazineOutletCapLocalEulerAngles = new Vector3(316.305176f, 183.988342f, 176.259995f);
         private const float CapMagazineCapPitch = 0.11f;
         private const float CapMagazineCapBottomLocalY = -0.63f;
@@ -353,6 +354,7 @@ namespace ConveyorTwin
             const float railWidth = 0.026f;
             const float railHeight = 0.035f;
             const float shortRightStartOffset = 0.42f;
+            const float rightSupportRailOverlap = 0.003f;
             var horizontalLength = Mathf.Abs(startX - endX);
             var rise = endY - startY;
             var length = Mathf.Sqrt(horizontalLength * horizontalLength + rise * rise);
@@ -376,6 +378,7 @@ namespace ConveyorTwin
             var rightRise = endY - rightStartY;
             var rightLength = Mathf.Sqrt(rightHorizontalLength * rightHorizontalLength + rightRise * rightRise);
             var rightCenterX = (rightStartX + endX) * 0.5f;
+            var rightRailVerticalOffset = centerY - (rightStartY + endY) * 0.5f;
             var rightRail = CreateCube(parent, $"{namePrefix} Right", new Vector3(rightCenterX, centerY, z - railHalfGap), new Vector3(railWidth, railHeight, rightLength), material);
             rightRail.transform.rotation = Quaternion.Euler(0f, 90f, pitchDegrees);
 
@@ -404,7 +407,10 @@ namespace ConveyorTwin
 
                 if (i != postCount - 1 && (!shortenRightRail || ratio >= rightStartRatio))
                 {
-                    CreateCube(parent, $"{namePrefix} Right Support", new Vector3(x, postCenterY, z - railHalfGap), new Vector3(0.035f, postHeight, 0.035f), material);
+                    var rightSupportTopY = railY + rightRailVerticalOffset - railHeight * 0.5f + rightSupportRailOverlap;
+                    var rightSupportCenterY = (0.48f + rightSupportTopY) * 0.5f;
+                    var rightSupportHeight = Mathf.Max(0.1f, rightSupportTopY - 0.48f);
+                    CreateCube(parent, $"{namePrefix} Right Support", new Vector3(x, rightSupportCenterY, z - railHalfGap), new Vector3(0.035f, rightSupportHeight, 0.035f), material);
                 }
             }
         }
@@ -607,7 +613,7 @@ namespace ConveyorTwin
                 parent,
                 "Filling Nozzle Main Rail",
                 new Vector3(FillingStarWheelCenterX, 1.45f + FillingNozzleClusterLift, FillingLineZ),
-                new Vector3(mainRailDiameter, 0.08f, mainRailDiameter),
+                new Vector3(mainRailDiameter, 0.12f, mainRailDiameter),
                 metalMaterial);
 
             const int nozzleCount = 3;
@@ -1016,14 +1022,16 @@ namespace ConveyorTwin
 
             var capTube = new GameObject("Transparent Cap Magazine Tube");
             capTube.transform.SetParent(capMagazineAssembly.transform);
-            capTube.transform.localPosition = Vector3.zero;
+            capTube.transform.localPosition = CapMagazineAssemblyLocalOffset;
             capTube.transform.localRotation = Quaternion.identity;
             var tubeMeshFilter = capTube.AddComponent<MeshFilter>();
             tubeMeshFilter.sharedMesh = CreateCurvedCapMagazineMesh(28, 0.20f, 0.10f);
             capTube.AddComponent<MeshRenderer>().sharedMaterial = capTubeMaterial;
 
-            var tubeOutlet = capMagazineAssembly.transform.TransformPoint(CapMagazineLocalPosition(-CapMagazineGuideHalfLength));
-            var defaultOutletPosition = new Vector3(capDropPosition.x, 1.68f, capDropPosition.z);
+            var tubeOutlet = capMagazineAssembly.transform.TransformPoint(
+                CapMagazineAssemblyLocalOffset + CapMagazineLocalPosition(-CapMagazineGuideHalfLength));
+            var defaultOutletPosition = new Vector3(capDropPosition.x, 1.68f, capDropPosition.z)
+                + capMagazineAssembly.transform.TransformVector(CapMagazineAssemblyLocalOffset);
             var guideRailLength = Vector3.Distance(tubeOutlet, defaultOutletPosition);
             var outletCapLocalRotation = Quaternion.Euler(CapMagazineOutletCapLocalEulerAngles);
             var guideRailWorldDirection = capMagazineAssembly.transform.TransformDirection(CapMagazinePathDirectionFromCapRotation(outletCapLocalRotation)).normalized;
@@ -1145,10 +1153,10 @@ namespace ConveyorTwin
 
         private static Vector3 CapMagazineCapLocalPosition(float localY, Vector3 outletLocalPosition)
         {
-            var tubeExitPosition = CapMagazineLocalPosition(-CapMagazineGuideHalfLength);
+            var tubeExitPosition = CapMagazineAssemblyLocalOffset + CapMagazineLocalPosition(-CapMagazineGuideHalfLength);
             if (localY >= -CapMagazineGuideHalfLength)
             {
-                return CapMagazineLocalPosition(localY);
+                return CapMagazineAssemblyLocalOffset + CapMagazineLocalPosition(localY);
             }
 
             var railRatio = Mathf.InverseLerp(-CapMagazineGuideHalfLength, CapMagazineCapBottomLocalY, localY);

@@ -29,6 +29,7 @@ namespace ConveyorTwin
         private const float CapMagazineBottomLocalY = -0.63f;
         private const float CapMagazineGuideHalfLengthM = 0.55f;
         private const float CapMagazineGuideCurveDepthM = 0.025f;
+        private static readonly Vector3 CapMagazineAssemblyLocalOffset = new Vector3(0f, 0.106515377f, -0.136654712f);
         private static readonly Vector3 CapMagazineOutletCapLocalEulerAngles = new Vector3(316.305176f, 183.988342f, 176.259995f);
         private const float CapGuideSlideSeconds = 0.14f;
         private const float CapCatchSlideSeconds = 0.06f;
@@ -341,9 +342,6 @@ namespace ConveyorTwin
                 scale.x = 1f + Mathf.Sin(Time.time * 12f) * 0.06f;
                 splitSensorBeam.localScale = scale;
             }
-
-            PulsePackGateSensor(packGateSensorA, 0f);
-            PulsePackGateSensor(packGateSensorB, 0.5f);
 
             // The star wheel visual is indexed by coroutine so bottles stay aligned with pockets.
         }
@@ -1792,7 +1790,8 @@ namespace ConveyorTwin
         private static Vector3 GetCapMagazineTubeLocalPosition(float localY)
         {
             var normalizedY = Mathf.Clamp(localY / CapMagazineGuideHalfLengthM, -1f, 1f);
-            return new Vector3(0f, localY, CapMagazineGuideCurveDepthM * (normalizedY * normalizedY - 1f));
+            return CapMagazineAssemblyLocalOffset
+                + new Vector3(0f, localY, CapMagazineGuideCurveDepthM * (normalizedY * normalizedY - 1f));
         }
 
         private Vector3 GetCapMagazineRailOutletLocalPosition()
@@ -2936,18 +2935,6 @@ namespace ConveyorTwin
                 elapsed += Time.deltaTime;
                 yield return null;
             }
-        }
-
-        private void PulsePackGateSensor(Transform sensor, float phaseOffset)
-        {
-            if (sensor == null)
-            {
-                return;
-            }
-
-            var scale = sensor.localScale;
-            scale.x = 0.52f * (1f + Mathf.Sin(Time.time * 13f + phaseOffset) * 0.06f);
-            sensor.localScale = scale;
         }
 
         private Vector3 PackCartonSlot(SplitLane lane, int row)
