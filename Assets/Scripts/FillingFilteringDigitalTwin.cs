@@ -25,6 +25,11 @@ namespace ConveyorTwin
             ResetHold
         }
 
+        private const float CapMagazineCapPitchM = 0.10f;
+        private const float CapMagazineBottomLocalY = -0.32f;
+        private const float CapGuideSlideSeconds = 0.14f;
+        private const float CapPlacementStrokeM = 0.10f;
+
         [Header("Stations")]
         public Transform infeedTurntable;
         public Transform bottleSpawnPoint;
@@ -235,6 +240,7 @@ namespace ConveyorTwin
         private readonly HashSet<BottleProcessState> cappingBottles = new HashSet<BottleProcessState>();
         private readonly HashSet<BottleProcessState> pushingBottles = new HashSet<BottleProcessState>();
         private readonly HashSet<BottleProcessState> droppingBottles = new HashSet<BottleProcessState>();
+        private readonly HashSet<BottleProcessState> capDroppingBottles = new HashSet<BottleProcessState>();
         private readonly HashSet<BottleProcessState> outletBottles = new HashSet<BottleProcessState>();
         private readonly Dictionary<BottleProcessState, int> fillingSlotAssignments = new Dictionary<BottleProcessState, int>();
         private readonly Dictionary<BottleProcessState, int> cappingSlotAssignments = new Dictionary<BottleProcessState, int>();
@@ -1347,7 +1353,11 @@ namespace ConveyorTwin
 
                 if (pocketIndex == capDropPocketIndex && !bottle.capPlaced)
                 {
-                    yield return DropCapOnBottle(bottle);
+                    BeginCapDrop(bottle);
+                    while (capDroppingBottles.Contains(bottle))
+                    {
+                        yield return null;
+                    }
                 }
 
                 if (pocketIndex >= cappingPocketStartIndex &&
@@ -1732,9 +1742,27 @@ namespace ConveyorTwin
                 cap.gameObject.SetActive(visible);
                 if (visible)
                 {
-                    cap.localPosition = new Vector3(cap.localPosition.x, 1.57f + i * 0.13f, cap.localPosition.z);
+                    cap.localPosition = new Vector3(0f, CapMagazineBottomLocalY + (capMagazineVisibleCount - 1 - i) * CapMagazineCapPitchM, 0f);
+                    cap.localRotation = Quaternion.identity;
                 }
             }
+        }
+
+        private Transform GetBottomMagazineCap()
+        {
+            if (capMagazineCaps == null || capMagazineCaps.Count == 0)
+            {
+                return null;
+            }
+
+            var capacity = Mathf.Clamp(capMagazineCapacity, 1, capMagazineCaps.Count);
+            if (capMagazineVisibleCount <= 0)
+            {
+                capMagazineVisibleCount = capacity;
+                UpdateCapMagazineVisuals();
+            }
+
+            return capMagazineCaps[Mathf.Clamp(capMagazineVisibleCount - 1, 0, capacity - 1)];
         }
 
         private void AssignCappingSlot(BottleProcessState bottle)
@@ -1964,9 +1992,7 @@ namespace ConveyorTwin
 
             if (slot >= capDropPocketIndex && !bottle.capPlaced)
             {
-                bottle.capPlaced = true;
-                bottle.RefreshVisuals();
-                ConsumeCapMagazineCap();
+                BeginCapDrop(bottle);
             }
         }
 
@@ -2128,11 +2154,52 @@ namespace ConveyorTwin
             releasingBottles.Remove(bottle);
         }
 
+        private void BeginCapDrop(BottleProcessState bottle)
+        {
+            if (bottle == null || bottle.capPlaced || !capDroppingBottles.Add(bottle))
+            {
+                return;
+            }
+
+            StartCoroutine(DropCapOnBottle(bottle));
+        }
+
         private IEnumerator DropCapOnBottle(BottleProcessState bottle)
         {
-            if (bottle == null || bottle.capPlaced)
+            if (bottle == null)
             {
                 yield break;
+            }
+
+            var sourceCap = GetBottomMagazineCap();
+            var capTargetPosition = bottle.capVisual != null
+                ? bottle.capVisual.position
+                : bottle.transform.position + Vector3.up * 0.66f;
+            var outletPosition = capDropper != null
+                ? capDropper.position + Vector3.down * 0.04f
+                : capTargetPosition + Vector3.up * 0.10f;
+
+            if (sourceCap != null)
+            {
+                sourceCap.gameObject.SetActive(true);
+                yield return MoveCapVisual(sourceCap, sourceCap.position, outletPosition, CapGuideSlideSeconds);
+            }
+
+            if (capDropper != null)
+            {
+                var basePosition = capDropper.position;
+                var dropPosition = basePosition + Vector3.down * CapPlacementStrokeM;
+                yield return MoveCapAndDropper(sourceCap, outletPosition, capTargetPosition, capDropper, basePosition, dropPosition, Mathf.Max(0.08f, capDropSeconds));
+                yield return MoveSingleTransform(capDropper, dropPosition, basePosition, Mathf.Max(0.08f, capDropSeconds));
+            }
+            else if (sourceCap != null)
+            {
+                yield return MoveCapVisual(sourceCap, outletPosition, capTargetPosition, Mathf.Max(0.08f, capDropSeconds));
+            }
+
+            if (sourceCap != null)
+            {
+                sourceCap.gameObject.SetActive(false);
             }
 
             bottle.capPlaced = true;
@@ -2147,15 +2214,58 @@ namespace ConveyorTwin
                 capSensorBeam.localScale = baseScale;
             }
 
-            if (capDropper == null)
+            capDroppingBottles.Remove(bottle);
+        }
+
+        private IEnumerator MoveCapVisual(Transform cap, Vector3 from, Vector3 to, float duration)
+        {
+            if (cap == null)
             {
                 yield break;
             }
 
-            var basePosition = capDropper.position;
-            var dropPosition = basePosition + Vector3.down * 0.16f;
-            yield return MoveSingleTransform(capDropper, basePosition, dropPosition, capDropSeconds * 0.5f);
-            yield return MoveSingleTransform(capDropper, dropPosition, basePosition, capDropSeconds * 0.5f);
+            var elapsed = 0f;
+            var moveDuration = Mathf.Max(0.01f, duration);
+            while (elapsed < moveDuration)
+            {
+                elapsed += Time.deltaTime;
+                cap.position = Vector3.Lerp(from, to, Mathf.SmoothStep(0f, 1f, elapsed / moveDuration));
+                yield return null;
+            }
+
+            cap.position = to;
+        }
+
+        private IEnumerator MoveCapAndDropper(Transform cap, Vector3 capFrom, Vector3 capTo, Transform dropper, Vector3 dropperFrom, Vector3 dropperTo, float duration)
+        {
+            var elapsed = 0f;
+            var moveDuration = Mathf.Max(0.01f, duration);
+            while (elapsed < moveDuration)
+            {
+                elapsed += Time.deltaTime;
+                var ratio = Mathf.SmoothStep(0f, 1f, elapsed / moveDuration);
+                if (cap != null)
+                {
+                    cap.position = Vector3.Lerp(capFrom, capTo, ratio);
+                }
+
+                if (dropper != null)
+                {
+                    dropper.position = Vector3.Lerp(dropperFrom, dropperTo, ratio);
+                }
+
+                yield return null;
+            }
+
+            if (cap != null)
+            {
+                cap.position = capTo;
+            }
+
+            if (dropper != null)
+            {
+                dropper.position = dropperTo;
+            }
         }
 
         private IEnumerator TightenCapForBottle(BottleProcessState bottle)

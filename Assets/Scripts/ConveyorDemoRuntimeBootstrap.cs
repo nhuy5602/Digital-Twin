@@ -34,6 +34,10 @@ namespace ConveyorTwin
         private static readonly int[] FillingNozzlePocketOrder = { 1, 2, 3 };
         private const int CapDropPocketIndex = 5;
         private const int CappingPocketStartIndex = 7;
+        private static readonly Vector3 CapMagazineTubePosition = new Vector3(1.44500005f, 2.09599996f, -1.30999994f);
+        private static readonly Vector3 CapMagazineTubeEulerAngles = new Vector3(321.961578f, 0f, 0f);
+        private const float CapMagazineCapPitch = 0.10f;
+        private const float CapMagazineCapBottomLocalY = -0.32f;
         private const float FillingNozzleScaleY = 0.32f;
         private const float FillingNozzleClusterLift = FillingNozzleScaleY * 2f;
         private const float FillingFirstZ = -1.2f;
@@ -992,11 +996,26 @@ namespace ConveyorTwin
 
             var dropperTool = new GameObject("Star Wheel Cap Dropper Moving Tool");
             dropperTool.transform.SetParent(parent);
-            dropperTool.transform.position = new Vector3(capDropPosition.x, 1.28f, capDropPosition.z);
+            dropperTool.transform.position = new Vector3(capDropPosition.x, 1.72f, capDropPosition.z);
+
+            var darkRubberMaterial = CreateMaterial(new Color(0.045f, 0.055f, 0.065f));
+            var placementChuck = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            placementChuck.name = "Cap Placement Rubber Chuck";
+            placementChuck.transform.SetParent(dropperTool.transform);
+            placementChuck.transform.localPosition = Vector3.zero;
+            placementChuck.transform.localScale = new Vector3(0.11f, 0.07f, 0.11f);
+            placementChuck.GetComponent<Renderer>().sharedMaterial = darkRubberMaterial;
+
+            var capMagazineAssembly = new GameObject("Cap Magazine Assembly");
+            capMagazineAssembly.transform.SetParent(parent);
+            capMagazineAssembly.transform.position = CapMagazineTubePosition;
+            capMagazineAssembly.transform.rotation = Quaternion.Euler(CapMagazineTubeEulerAngles);
+
             var capTube = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             capTube.name = "Transparent Cap Magazine Tube";
-            capTube.transform.SetParent(parent);
-            capTube.transform.position = new Vector3(capDropPosition.x, 1.9f, capDropPosition.z);
+            capTube.transform.SetParent(capMagazineAssembly.transform);
+            capTube.transform.localPosition = Vector3.zero;
+            capTube.transform.localRotation = Quaternion.identity;
             capTube.transform.localScale = new Vector3(0.16f, 0.42f, 0.16f);
             capTube.GetComponent<Renderer>().sharedMaterial = capTubeMaterial;
 
@@ -1004,11 +1023,36 @@ namespace ConveyorTwin
             {
                 var capInTube = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
                 capInTube.name = $"Cap Magazine Tube Cap {i + 1}";
-                capInTube.transform.SetParent(parent);
-                capInTube.transform.position = new Vector3(capDropPosition.x, 1.57f + i * 0.13f, capDropPosition.z);
+                capInTube.transform.SetParent(capMagazineAssembly.transform);
+                capInTube.transform.localPosition = Vector3.up * (CapMagazineCapBottomLocalY + (4 - i) * CapMagazineCapPitch);
+                capInTube.transform.localRotation = Quaternion.identity;
                 capInTube.transform.localScale = new Vector3(0.105f, 0.018f, 0.105f);
                 capInTube.GetComponent<Renderer>().sharedMaterial = capMaterial;
                 magazineCaps.Add(capInTube.transform);
+            }
+
+            var tubeOutlet = capTube.transform.TransformPoint(Vector3.down);
+            var outletPosition = new Vector3(capDropPosition.x, 1.68f, capDropPosition.z);
+            CreateCapGuideRail(parent, "Cap Guide Rail Left", tubeOutlet + Vector3.left * 0.075f, outletPosition + Vector3.left * 0.075f, metalMaterial);
+            CreateCapGuideRail(parent, "Cap Guide Rail Right", tubeOutlet + Vector3.right * 0.075f, outletPosition + Vector3.right * 0.075f, metalMaterial);
+            CreateCapGuideRail(parent, "Cap Guide Support Arm", capTube.transform.TransformPoint(Vector3.up * 0.52f) + Vector3.right * 0.12f, outletPosition + Vector3.right * 0.17f + Vector3.up * 0.08f, metalMaterial, 0.045f);
+
+            var outletCollar = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            outletCollar.name = "Cap Guide Outlet Collar";
+            outletCollar.transform.SetParent(parent);
+            outletCollar.transform.position = outletPosition;
+            outletCollar.transform.localScale = new Vector3(0.13f, 0.055f, 0.13f);
+            outletCollar.GetComponent<Renderer>().sharedMaterial = metalMaterial;
+
+            for (var i = 0; i < 2; i++)
+            {
+                var side = i == 0 ? -1f : 1f;
+                CreateCube(
+                    parent,
+                    $"Cap Outlet Retaining Finger {i + 1}",
+                    outletPosition + new Vector3(side * 0.085f, -0.07f, 0f),
+                    new Vector3(0.022f, 0.11f, 0.045f),
+                    darkRubberMaterial);
             }
 
             Transform sensor = null;
@@ -1040,6 +1084,15 @@ namespace ConveyorTwin
             }
 
             return (heads, dropperTool.transform, sensor, magazineCaps);
+        }
+
+        private Transform CreateCapGuideRail(Transform parent, string name, Vector3 start, Vector3 end, Material material, float thickness = 0.024f)
+        {
+            var direction = end - start;
+            var length = Mathf.Max(0.01f, direction.magnitude);
+            var rail = CreateCube(parent, name, Vector3.Lerp(start, end, 0.5f), new Vector3(thickness, thickness, length), material);
+            rail.transform.rotation = Quaternion.FromToRotation(Vector3.forward, direction.normalized);
+            return rail.transform;
         }
 
         private void CreateVideoStyleMachineDetails(Transform parent, Material metalMaterial, Material clearGuardMaterial, Material panelMaterial, Material hoseMaterial, Material capMaterial, Material sensorMaterial, Material rejectMaterial, Material curtainMaterial)
