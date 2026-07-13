@@ -28,6 +28,8 @@ namespace ConveyorTwin
         private const float StarWheelStepAngleDegrees = 360f / FillingStarWheelPocketCount;
         private const float FillingStarWheelPocketNotchRadius = 0.075f;
         private const float FillingStarWheelOuterRadius = 0.8f;
+        private const float StarWheelContinuousBarrierRadius = FillingStarWheelOuterRadius + 0.045f;
+        private const float FillingNozzleMainRailRadius = StarWheelContinuousBarrierRadius + 0.1f;
         private const float FillingStarWheelBottleRadius = FillingStarWheelOuterRadius - FillingStarWheelPocketNotchRadius;
         private const float FillingStarWheelEntryAngleDegrees = 180f;
         private const int FillingStationStartPocketIndex = 1;
@@ -36,8 +38,11 @@ namespace ConveyorTwin
         private const int CappingPocketStartIndex = 7;
         private static readonly Vector3 CapMagazineTubePosition = new Vector3(1.44500005f, 2.09599996f, -1.30999994f);
         private static readonly Vector3 CapMagazineTubeEulerAngles = new Vector3(321.961578f, 0f, 0f);
-        private const float CapMagazineCapPitch = 0.10f;
-        private const float CapMagazineCapBottomLocalY = -0.32f;
+        private static readonly Vector3 CapMagazineOutletCapLocalEulerAngles = new Vector3(316.305176f, 183.988342f, 176.259995f);
+        private const float CapMagazineCapPitch = 0.11f;
+        private const float CapMagazineCapBottomLocalY = -0.63f;
+        private const float CapMagazineGuideHalfLength = 0.55f;
+        private const float CapMagazineGuideCurveDepth = 0.025f;
         private const float FillingNozzleScaleY = 0.32f;
         private const float FillingNozzleClusterLift = FillingNozzleScaleY * 2f;
         private const float FillingFirstZ = -1.2f;
@@ -597,7 +602,13 @@ namespace ConveyorTwin
         {
             var nozzles = new List<Transform>();
             var springs = new List<Transform>();
-            CreateCube(parent, "Filling Nozzle Main Rail", new Vector3(FillingStarWheelCenterX + 0.33f, 1.45f + FillingNozzleClusterLift, -0.72f), new Vector3(0.95f, 0.08f, 1.2f), metalMaterial);
+            var mainRailDiameter = FillingNozzleMainRailRadius * 2f;
+            CreateCube(
+                parent,
+                "Filling Nozzle Main Rail",
+                new Vector3(FillingStarWheelCenterX, 1.45f + FillingNozzleClusterLift, FillingLineZ),
+                new Vector3(mainRailDiameter, 0.08f, mainRailDiameter),
+                metalMaterial);
 
             const int nozzleCount = 3;
             for (var i = 0; i < nozzleCount; i++)
@@ -994,66 +1005,47 @@ namespace ConveyorTwin
             var magazineCaps = new List<Transform>();
             var capDropPosition = StarWheelPocketPosition(CapDropPocketIndex, 0f);
 
-            var dropperTool = new GameObject("Star Wheel Cap Dropper Moving Tool");
+            var dropperTool = new GameObject("Star Wheel Cap Catch Point");
             dropperTool.transform.SetParent(parent);
-            dropperTool.transform.position = new Vector3(capDropPosition.x, 1.72f, capDropPosition.z);
 
-            var darkRubberMaterial = CreateMaterial(new Color(0.045f, 0.055f, 0.065f));
-            var placementChuck = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-            placementChuck.name = "Cap Placement Rubber Chuck";
-            placementChuck.transform.SetParent(dropperTool.transform);
-            placementChuck.transform.localPosition = Vector3.zero;
-            placementChuck.transform.localScale = new Vector3(0.11f, 0.07f, 0.11f);
-            placementChuck.GetComponent<Renderer>().sharedMaterial = darkRubberMaterial;
 
             var capMagazineAssembly = new GameObject("Cap Magazine Assembly");
             capMagazineAssembly.transform.SetParent(parent);
             capMagazineAssembly.transform.position = CapMagazineTubePosition;
             capMagazineAssembly.transform.rotation = Quaternion.Euler(CapMagazineTubeEulerAngles);
 
-            var capTube = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-            capTube.name = "Transparent Cap Magazine Tube";
+            var capTube = new GameObject("Transparent Cap Magazine Tube");
             capTube.transform.SetParent(capMagazineAssembly.transform);
             capTube.transform.localPosition = Vector3.zero;
             capTube.transform.localRotation = Quaternion.identity;
-            capTube.transform.localScale = new Vector3(0.16f, 0.42f, 0.16f);
-            capTube.GetComponent<Renderer>().sharedMaterial = capTubeMaterial;
+            var tubeMeshFilter = capTube.AddComponent<MeshFilter>();
+            tubeMeshFilter.sharedMesh = CreateCurvedCapMagazineMesh(28, 0.20f, 0.10f);
+            capTube.AddComponent<MeshRenderer>().sharedMaterial = capTubeMaterial;
 
-            for (var i = 0; i < 5; i++)
+            var tubeOutlet = capMagazineAssembly.transform.TransformPoint(CapMagazineLocalPosition(-CapMagazineGuideHalfLength));
+            var defaultOutletPosition = new Vector3(capDropPosition.x, 1.68f, capDropPosition.z);
+            var guideRailLength = Vector3.Distance(tubeOutlet, defaultOutletPosition);
+            var outletCapLocalRotation = Quaternion.Euler(CapMagazineOutletCapLocalEulerAngles);
+            var guideRailWorldDirection = capMagazineAssembly.transform.TransformDirection(CapMagazinePathDirectionFromCapRotation(outletCapLocalRotation)).normalized;
+            var outletPosition = tubeOutlet + guideRailWorldDirection * guideRailLength;
+            var outletLocalPosition = capMagazineAssembly.transform.InverseTransformPoint(outletPosition);
+            dropperTool.transform.position = outletPosition;
+
+            for (var i = 0; i < 10; i++)
             {
                 var capInTube = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
                 capInTube.name = $"Cap Magazine Tube Cap {i + 1}";
                 capInTube.transform.SetParent(capMagazineAssembly.transform);
-                capInTube.transform.localPosition = Vector3.up * (CapMagazineCapBottomLocalY + (4 - i) * CapMagazineCapPitch);
-                capInTube.transform.localRotation = Quaternion.identity;
+                var capLocalY = CapMagazineCapBottomLocalY + (9 - i) * CapMagazineCapPitch;
+                capInTube.transform.localPosition = CapMagazineCapLocalPosition(capLocalY, outletLocalPosition);
+                capInTube.transform.localRotation = CapMagazineCapLocalRotation(capLocalY);
                 capInTube.transform.localScale = new Vector3(0.105f, 0.018f, 0.105f);
                 capInTube.GetComponent<Renderer>().sharedMaterial = capMaterial;
                 magazineCaps.Add(capInTube.transform);
             }
 
-            var tubeOutlet = capTube.transform.TransformPoint(Vector3.down);
-            var outletPosition = new Vector3(capDropPosition.x, 1.68f, capDropPosition.z);
             CreateCapGuideRail(parent, "Cap Guide Rail Left", tubeOutlet + Vector3.left * 0.075f, outletPosition + Vector3.left * 0.075f, metalMaterial);
             CreateCapGuideRail(parent, "Cap Guide Rail Right", tubeOutlet + Vector3.right * 0.075f, outletPosition + Vector3.right * 0.075f, metalMaterial);
-            CreateCapGuideRail(parent, "Cap Guide Support Arm", capTube.transform.TransformPoint(Vector3.up * 0.52f) + Vector3.right * 0.12f, outletPosition + Vector3.right * 0.17f + Vector3.up * 0.08f, metalMaterial, 0.045f);
-
-            var outletCollar = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-            outletCollar.name = "Cap Guide Outlet Collar";
-            outletCollar.transform.SetParent(parent);
-            outletCollar.transform.position = outletPosition;
-            outletCollar.transform.localScale = new Vector3(0.13f, 0.055f, 0.13f);
-            outletCollar.GetComponent<Renderer>().sharedMaterial = metalMaterial;
-
-            for (var i = 0; i < 2; i++)
-            {
-                var side = i == 0 ? -1f : 1f;
-                CreateCube(
-                    parent,
-                    $"Cap Outlet Retaining Finger {i + 1}",
-                    outletPosition + new Vector3(side * 0.085f, -0.07f, 0f),
-                    new Vector3(0.022f, 0.11f, 0.045f),
-                    darkRubberMaterial);
-            }
 
             Transform sensor = null;
 
@@ -1084,6 +1076,103 @@ namespace ConveyorTwin
             }
 
             return (heads, dropperTool.transform, sensor, magazineCaps);
+        }
+
+        private static Vector3 CapMagazineLocalPosition(float localY)
+        {
+            var normalizedY = Mathf.Clamp(localY / CapMagazineGuideHalfLength, -1f, 1f);
+            return new Vector3(0f, localY, CapMagazineGuideCurveDepth * (normalizedY * normalizedY - 1f));
+        }
+
+        private Mesh CreateCurvedCapMagazineMesh(int segmentCount, float width, float depth)
+        {
+            var sectionCount = Mathf.Max(2, segmentCount) + 1;
+            var vertices = new Vector3[sectionCount * 4];
+            var triangles = new List<int>((sectionCount - 1) * 24 + 12);
+            var halfWidth = width * 0.5f;
+            var halfDepth = depth * 0.5f;
+
+            for (var i = 0; i < sectionCount; i++)
+            {
+                var ratio = i / (float)(sectionCount - 1);
+                var localY = Mathf.Lerp(-CapMagazineGuideHalfLength, CapMagazineGuideHalfLength, ratio);
+                var normalizedY = localY / CapMagazineGuideHalfLength;
+                var slope = 2f * CapMagazineGuideCurveDepth * normalizedY / CapMagazineGuideHalfLength;
+                var tangent = new Vector3(0f, 1f, slope).normalized;
+                var crossNormal = new Vector3(0f, -tangent.z, tangent.y);
+                var center = CapMagazineLocalPosition(localY);
+                var baseIndex = i * 4;
+                vertices[baseIndex] = center - Vector3.right * halfWidth - crossNormal * halfDepth;
+                vertices[baseIndex + 1] = center + Vector3.right * halfWidth - crossNormal * halfDepth;
+                vertices[baseIndex + 2] = center + Vector3.right * halfWidth + crossNormal * halfDepth;
+                vertices[baseIndex + 3] = center - Vector3.right * halfWidth + crossNormal * halfDepth;
+            }
+
+            for (var i = 0; i < sectionCount - 1; i++)
+            {
+                var current = i * 4;
+                var next = current + 4;
+                AddMeshQuad(triangles, current, next, next + 1, current + 1);
+                AddMeshQuad(triangles, current + 1, next + 1, next + 2, current + 2);
+                AddMeshQuad(triangles, current + 2, next + 2, next + 3, current + 3);
+                AddMeshQuad(triangles, current + 3, next + 3, next, current);
+            }
+
+            AddMeshQuad(triangles, 3, 2, 1, 0);
+            var end = (sectionCount - 1) * 4;
+            AddMeshQuad(triangles, end, end + 1, end + 2, end + 3);
+
+            var mesh = new Mesh
+            {
+                name = "Transparent Cap Magazine Smooth Curved Mesh",
+                vertices = vertices,
+                triangles = triangles.ToArray()
+            };
+            mesh.RecalculateNormals();
+            mesh.RecalculateBounds();
+            return mesh;
+        }
+
+        private static void AddMeshQuad(List<int> triangles, int a, int b, int c, int d)
+        {
+            triangles.Add(a);
+            triangles.Add(b);
+            triangles.Add(c);
+            triangles.Add(a);
+            triangles.Add(c);
+            triangles.Add(d);
+        }
+
+        private static Vector3 CapMagazineCapLocalPosition(float localY, Vector3 outletLocalPosition)
+        {
+            var tubeExitPosition = CapMagazineLocalPosition(-CapMagazineGuideHalfLength);
+            if (localY >= -CapMagazineGuideHalfLength)
+            {
+                return CapMagazineLocalPosition(localY);
+            }
+
+            var railRatio = Mathf.InverseLerp(-CapMagazineGuideHalfLength, CapMagazineCapBottomLocalY, localY);
+            return Vector3.Lerp(tubeExitPosition, outletLocalPosition, railRatio);
+        }
+
+        private static Quaternion CapMagazineCapLocalRotation(float localY)
+        {
+            if (localY < -CapMagazineGuideHalfLength)
+            {
+                return Quaternion.Euler(CapMagazineOutletCapLocalEulerAngles);
+            }
+
+            Vector3 pathDirection;
+            var normalizedY = Mathf.Clamp(localY / CapMagazineGuideHalfLength, -1f, 1f);
+            var slope = 2f * CapMagazineGuideCurveDepth * normalizedY / CapMagazineGuideHalfLength;
+            pathDirection = new Vector3(0f, 1f, slope);
+
+            return Quaternion.FromToRotation(Vector3.up, pathDirection.normalized) * Quaternion.Euler(90f, 0f, 0f);
+        }
+
+        private static Vector3 CapMagazinePathDirectionFromCapRotation(Quaternion capLocalRotation)
+        {
+            return (capLocalRotation * Quaternion.Euler(-90f, 0f, 0f)) * Vector3.up;
         }
 
         private Transform CreateCapGuideRail(Transform parent, string name, Vector3 start, Vector3 end, Material material, float thickness = 0.024f)

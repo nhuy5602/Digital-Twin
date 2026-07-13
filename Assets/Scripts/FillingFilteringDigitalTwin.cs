@@ -25,10 +25,14 @@ namespace ConveyorTwin
             ResetHold
         }
 
-        private const float CapMagazineCapPitchM = 0.10f;
-        private const float CapMagazineBottomLocalY = -0.32f;
+        private const float CapMagazineCapPitchM = 0.11f;
+        private const float CapMagazineBottomLocalY = -0.63f;
+        private const float CapMagazineGuideHalfLengthM = 0.55f;
+        private const float CapMagazineGuideCurveDepthM = 0.025f;
+        private static readonly Vector3 CapMagazineOutletCapLocalEulerAngles = new Vector3(316.305176f, 183.988342f, 176.259995f);
         private const float CapGuideSlideSeconds = 0.14f;
-        private const float CapPlacementStrokeM = 0.10f;
+        private const float CapCatchSlideSeconds = 0.06f;
+        private const float CapMagazineRestackSeconds = 0.14f;
 
         [Header("Stations")]
         public Transform infeedTurntable;
@@ -99,7 +103,7 @@ namespace ConveyorTwin
         public float capDropSeconds = 0.08f;
         public float capperMoveSeconds = 0.08f;
         public float capperStrokeM = 0.38f;
-        public int capMagazineCapacity = 5;
+        public int capMagazineCapacity = 10;
         public int capDropPocketIndex = 5;
         public int cappingPocketStartIndex = 7;
         public float cappingSpeedMultiplier = 10f;
@@ -1699,11 +1703,11 @@ namespace ConveyorTwin
             }
         }
 
-        private void ConsumeCapMagazineCap()
+        private IEnumerator ConsumeCapMagazineCap()
         {
             if (capMagazineCaps == null || capMagazineCaps.Count == 0)
             {
-                return;
+                yield break;
             }
 
             var capacity = Mathf.Clamp(capMagazineCapacity, 1, capMagazineCaps.Count);
@@ -1716,8 +1720,11 @@ namespace ConveyorTwin
             if (capMagazineVisibleCount <= 0)
             {
                 capMagazineVisibleCount = capacity;
+                UpdateCapMagazineVisuals();
+                yield break;
             }
 
+            yield return SlideMagazineCapsToRestingPositions();
             UpdateCapMagazineVisuals();
         }
 
@@ -1742,9 +1749,95 @@ namespace ConveyorTwin
                 cap.gameObject.SetActive(visible);
                 if (visible)
                 {
-                    cap.localPosition = new Vector3(0f, CapMagazineBottomLocalY + (capMagazineVisibleCount - 1 - i) * CapMagazineCapPitchM, 0f);
-                    cap.localRotation = Quaternion.identity;
+                    cap.localPosition = GetCapMagazineLocalPosition(i, capMagazineVisibleCount);
+                    cap.localRotation = GetCapMagazineLocalRotation(i, capMagazineVisibleCount);
                 }
+            }
+        }
+
+        private Vector3 GetCapMagazineLocalPosition(int capIndex, int visibleCount)
+        {
+            var localY = GetCapMagazineLayoutLocalY(capIndex, visibleCount);
+            var tubeExitPosition = GetCapMagazineTubeLocalPosition(-CapMagazineGuideHalfLengthM);
+            if (localY >= -CapMagazineGuideHalfLengthM)
+            {
+                return GetCapMagazineTubeLocalPosition(localY);
+            }
+
+            var railRatio = Mathf.InverseLerp(-CapMagazineGuideHalfLengthM, CapMagazineBottomLocalY, localY);
+            return Vector3.Lerp(tubeExitPosition, GetCapMagazineRailOutletLocalPosition(), railRatio);
+        }
+
+        private Quaternion GetCapMagazineLocalRotation(int capIndex, int visibleCount)
+        {
+            var localY = GetCapMagazineLayoutLocalY(capIndex, visibleCount);
+            if (localY < -CapMagazineGuideHalfLengthM)
+            {
+                return Quaternion.Euler(CapMagazineOutletCapLocalEulerAngles);
+            }
+
+            Vector3 pathDirection;
+            var normalizedY = Mathf.Clamp(localY / CapMagazineGuideHalfLengthM, -1f, 1f);
+            var slope = 2f * CapMagazineGuideCurveDepthM * normalizedY / CapMagazineGuideHalfLengthM;
+            pathDirection = new Vector3(0f, 1f, slope);
+
+            return Quaternion.FromToRotation(Vector3.up, pathDirection.normalized) * Quaternion.Euler(90f, 0f, 0f);
+        }
+
+        private static float GetCapMagazineLayoutLocalY(int capIndex, int visibleCount)
+        {
+            return CapMagazineBottomLocalY + (visibleCount - 1 - capIndex) * CapMagazineCapPitchM;
+        }
+
+        private static Vector3 GetCapMagazineTubeLocalPosition(float localY)
+        {
+            var normalizedY = Mathf.Clamp(localY / CapMagazineGuideHalfLengthM, -1f, 1f);
+            return new Vector3(0f, localY, CapMagazineGuideCurveDepthM * (normalizedY * normalizedY - 1f));
+        }
+
+        private Vector3 GetCapMagazineRailOutletLocalPosition()
+        {
+            var assembly = capMagazineCaps != null && capMagazineCaps.Count > 0 && capMagazineCaps[0] != null
+                ? capMagazineCaps[0].parent
+                : null;
+            if (assembly == null || capDropper == null)
+            {
+                return GetCapMagazineTubeLocalPosition(-CapMagazineGuideHalfLengthM);
+            }
+
+            return assembly.InverseTransformPoint(capDropper.position);
+        }
+
+        private IEnumerator SlideMagazineCapsToRestingPositions()
+        {
+            var capsToSlide = new List<Transform>();
+            var startPositions = new List<Vector3>();
+            var targetPositions = new List<Vector3>();
+            for (var i = 0; i < capMagazineVisibleCount; i++)
+            {
+                var cap = capMagazineCaps[i];
+                if (cap == null)
+                {
+                    continue;
+                }
+
+                capsToSlide.Add(cap);
+                startPositions.Add(cap.localPosition);
+                targetPositions.Add(GetCapMagazineLocalPosition(i, capMagazineVisibleCount));
+            }
+
+            var elapsed = 0f;
+            while (elapsed < CapMagazineRestackSeconds)
+            {
+                elapsed += Time.deltaTime;
+                var ratio = Mathf.SmoothStep(0f, 1f, elapsed / CapMagazineRestackSeconds);
+                for (var i = 0; i < capsToSlide.Count; i++)
+                {
+                    capsToSlide[i].localPosition = Vector3.Lerp(startPositions[i], targetPositions[i], ratio);
+                    capsToSlide[i].localRotation = GetCapMagazineLocalRotation(i, capMagazineVisibleCount);
+                }
+
+                yield return null;
             }
         }
 
@@ -2185,16 +2278,9 @@ namespace ConveyorTwin
                 yield return MoveCapVisual(sourceCap, sourceCap.position, outletPosition, CapGuideSlideSeconds);
             }
 
-            if (capDropper != null)
+            if (sourceCap != null)
             {
-                var basePosition = capDropper.position;
-                var dropPosition = basePosition + Vector3.down * CapPlacementStrokeM;
-                yield return MoveCapAndDropper(sourceCap, outletPosition, capTargetPosition, capDropper, basePosition, dropPosition, Mathf.Max(0.08f, capDropSeconds));
-                yield return MoveSingleTransform(capDropper, dropPosition, basePosition, Mathf.Max(0.08f, capDropSeconds));
-            }
-            else if (sourceCap != null)
-            {
-                yield return MoveCapVisual(sourceCap, outletPosition, capTargetPosition, Mathf.Max(0.08f, capDropSeconds));
+                yield return MoveCapVisual(sourceCap, outletPosition, capTargetPosition, CapCatchSlideSeconds);
             }
 
             if (sourceCap != null)
@@ -2204,7 +2290,7 @@ namespace ConveyorTwin
 
             bottle.capPlaced = true;
             bottle.RefreshVisuals();
-            ConsumeCapMagazineCap();
+            yield return ConsumeCapMagazineCap();
 
             if (capSensorBeam != null)
             {
@@ -2234,38 +2320,6 @@ namespace ConveyorTwin
             }
 
             cap.position = to;
-        }
-
-        private IEnumerator MoveCapAndDropper(Transform cap, Vector3 capFrom, Vector3 capTo, Transform dropper, Vector3 dropperFrom, Vector3 dropperTo, float duration)
-        {
-            var elapsed = 0f;
-            var moveDuration = Mathf.Max(0.01f, duration);
-            while (elapsed < moveDuration)
-            {
-                elapsed += Time.deltaTime;
-                var ratio = Mathf.SmoothStep(0f, 1f, elapsed / moveDuration);
-                if (cap != null)
-                {
-                    cap.position = Vector3.Lerp(capFrom, capTo, ratio);
-                }
-
-                if (dropper != null)
-                {
-                    dropper.position = Vector3.Lerp(dropperFrom, dropperTo, ratio);
-                }
-
-                yield return null;
-            }
-
-            if (cap != null)
-            {
-                cap.position = capTo;
-            }
-
-            if (dropper != null)
-            {
-                dropper.position = dropperTo;
-            }
         }
 
         private IEnumerator TightenCapForBottle(BottleProcessState bottle)
