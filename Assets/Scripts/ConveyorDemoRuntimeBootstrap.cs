@@ -11,7 +11,15 @@ namespace ConveyorTwin
         private const float FillingLineZ = -0.903f;
         private static readonly Vector3 FillingStarWheelVisualCenter = new Vector3(FillingStarWheelCenterX, 0f, FillingLineZ);
         private static readonly Vector3 FillingStarWheelBottleCenter = new Vector3(FillingStarWheelCenterX, 0.92f, FillingLineZ);
-        private static readonly Vector3 AccumulationTurntableCenter = new Vector3(0f, 0.92f, 4.78f);
+        private const float MainConveyorStartZ = -2.431457f;
+        private const float SplitSensorZ = 3.58f;
+        private const float SplitGuideZ = 4.47733736f;
+        private const float SplitGuideExitZ = 5.05f;
+        private const float LaneBCenterX = 0.62f;
+        private const float MainConveyorEndZ = 7.65f;
+        private const float PackFrontRowZ = 7.12f;
+        private const float PackRowPitch = 0.4555f;
+        private static readonly Vector3 PackCartonCenter = new Vector3(1.41f, 0.58f, PackFrontRowZ - PackRowPitch);
         private static readonly Vector3 ScallopedStarWheelDiscLocalPosition = new Vector3(0f, 1.485f, 0f);
         private static readonly Vector3 InfeedTurntableBottleCenter = new Vector3(-3.253f, 1.05f, FillingLineZ);
         private const int FillingStarWheelPocketCount = 10;
@@ -77,7 +85,7 @@ namespace ConveyorTwin
             var qcBeam = CreateQcSensor(root.transform, sensorMaterial, metalMaterial);
             var cappingStation = CreateCappingStation(root.transform, metalMaterial, capMaterial, capTubeMaterial, sensorMaterial);
             var pusher = CreatePusher(root.transform, metalMaterial, rejectMaterial);
-            var accumulationStation = CreateAccumulationTurntableStation(root.transform, metalMaterial, sensorMaterial, cartonMaterial);
+            var packingStation = CreateSplitterAndPackingStation(root.transform, metalMaterial, sensorMaterial, cartonMaterial);
             var bottleTemplate = CreateBottleTemplate(root.transform, bottleMaterial, waterMaterial, capMaterial, labelMaterial);
 
             var processObject = new GameObject("Filling Filtering Process Controller");
@@ -100,12 +108,10 @@ namespace ConveyorTwin
             process.capSensorBeam = cappingStation.sensor;
             process.capMagazineCaps = cappingStation.magazineCaps;
             process.pneumaticPusher = pusher;
-            process.accumulationTurntable = accumulationStation.turntable;
-            process.accumulationSensorBeam = accumulationStation.sensor;
-            process.accumulationInletGate = accumulationStation.inletGate;
-            process.accumulationOutletGate = accumulationStation.outletGate;
-            process.cartonBox = accumulationStation.carton;
-            process.cartonPusher = accumulationStation.cartonPusher;
+            process.splitSensorBeam = packingStation.sensor;
+            process.splitGuidePivot = packingStation.guidePivot;
+            process.packCarton = packingStation.carton;
+            process.packPusher = packingStation.pusher;
             process.bottleTemplate = bottleTemplate;
             process.conveyorSpeedMps = 0.85f;
             process.slatPitchM = 0.22f;
@@ -127,13 +133,15 @@ namespace ConveyorTwin
             process.capperStrokeM = 0.2f;
             process.cappingTimeSeconds = 0.18f;
             process.cappingSpeedMultiplier = 10f;
-            process.acceptEndZ = 3.68f;
-            process.accumulationTurntableCenter = AccumulationTurntableCenter;
-            process.accumulationTurntableRadius = 0.86f;
-            process.accumulationBatchSize = 6;
-            process.accumulationSensorZ = 3.68f;
-            process.cartonLoadPosition = new Vector3(1.38f, 0.58f, AccumulationTurntableCenter.z);
-            process.cartonExitPosition = new Vector3(2.45f, 0.58f, AccumulationTurntableCenter.z + 0.35f);
+            process.splitSensorZ = SplitSensorZ;
+            process.splitGuideZ = SplitGuideZ;
+            process.splitGuideExitZ = SplitGuideExitZ;
+            process.laneBCenterX = LaneBCenterX;
+            process.splitGuideMoveSeconds = 0.08f;
+            process.packFrontRowZ = PackFrontRowZ;
+            process.packRowPitchM = PackRowPitch;
+            process.packCartonLoadPosition = PackCartonCenter;
+            process.packCartonExitPosition = PackCartonCenter + new Vector3(1.15f, 0f, 0f);
             process.starWheelPocketCount = FillingStarWheelPocketCount;
             process.starWheelCenter = FillingStarWheelBottleCenter;
             process.starWheelPocketRadius = FillingStarWheelBottleRadius;
@@ -165,6 +173,11 @@ namespace ConveyorTwin
             process.neckRailStartBottleY = FillingStarWheelBottleCenter.y;
             process.neckRailEndBottleY = FillingStarWheelBottleCenter.y;
             process.airBlowerWindSpeedMps = 0.8f;
+
+            foreach (var conveyorAnimator in root.GetComponentsInChildren<SlatChainConveyorAnimator>())
+            {
+                conveyorAnimator.speedSource = process;
+            }
 
             CreateHud(root.transform, process);
             ConfigureCameraAndLight();
@@ -245,46 +258,45 @@ namespace ConveyorTwin
 
         private void CreateConveyor(Transform parent, Material beltMaterial, Material metalMaterial, Material slatMaterial, Material ribMaterial, Material sensorMaterial)
         {
-            const float conveyorStartZ = -2.431457f;
-            const float conveyorEndZ = 5.9f;
-            var conveyorLength = conveyorEndZ - conveyorStartZ;
-            var conveyorCenterZ = (conveyorStartZ + conveyorEndZ) * 0.5f;
-            CreateCube(parent, "Slat Chain Conveyor Base", new Vector3(0f, 0.38f, conveyorCenterZ), new Vector3(0.52f, 0.08f, conveyorLength), beltMaterial);
+            CreateSlatConveyorLane(parent, "A", 0f, MainConveyorStartZ, MainConveyorEndZ, beltMaterial, metalMaterial, slatMaterial, ribMaterial);
+            CreateSlatConveyorLane(parent, "B", LaneBCenterX, SplitGuideZ, MainConveyorEndZ, beltMaterial, metalMaterial, slatMaterial, ribMaterial);
 
-            const float pitch = 0.22f;
-            const float slatLength = 0.17f;
-            var slatCount = Mathf.CeilToInt(conveyorLength / pitch);
-            var movingParts = new List<Transform>();
-            for (var i = 0; i < slatCount; i++)
-            {
-                var z = conveyorStartZ + i * pitch;
-                movingParts.Add(CreateCube(parent, "Modular Slat Plate", new Vector3(0f, 0.46f, z), new Vector3(0.46f, 0.035f, slatLength), slatMaterial).transform);
-                movingParts.Add(CreateCube(parent, "Slat Gap Shadow", new Vector3(0f, 0.482f, z + slatLength * 0.5f + 0.017f), new Vector3(0.47f, 0.012f, 0.028f), beltMaterial).transform);
-
-                if (i % 2 == 0)
-                {
-                    movingParts.Add(CreateCube(parent, "Anti Slip Cross Rib", new Vector3(0f, 0.515f, z - 0.055f), new Vector3(0.42f, 0.026f, 0.022f), ribMaterial).transform);
-                }
-            }
-
-            CreateConveyorAnimator(parent, "Main Slat Chain Motion", movingParts, Vector3.forward, 0.85f, conveyorStartZ - pitch, conveyorStartZ + slatCount * pitch);
-
-            CreateMainConveyorGuideRail(parent, "Left Narrow Guide Rail", -0.28f, conveyorEndZ, metalMaterial);
-            CreateMainConveyorGuideRail(parent, "Right Narrow Guide Rail", 0.28f, conveyorEndZ, metalMaterial);
-            CreateCube(parent, "Narrow Conveyor Support", new Vector3(0f, 0.2f, conveyorCenterZ), new Vector3(0.68f, 0.15f, conveyorLength + 0.2f), metalMaterial);
+            const float pusherGapEndZ = 1.61f;
+            CreateGuideRailSegment(parent, "Left Narrow Guide Rail After Pusher Gap", -0.28f, pusherGapEndZ, MainConveyorEndZ, metalMaterial);
+            CreateGuideRailSegment(parent, "Right Narrow Guide Rail Before Split", 0.28f, pusherGapEndZ, SplitGuideZ - 0.12f, metalMaterial);
+            CreateGuideRailSegment(parent, "Right Narrow Guide Rail After Split", 0.28f, SplitGuideExitZ, MainConveyorEndZ, metalMaterial);
+            CreateGuideRailSegment(parent, "B Right Narrow Guide Rail", LaneBCenterX + 0.28f, SplitGuideZ, MainConveyorEndZ, metalMaterial);
+            CreateGuideRailSegment(parent, "B Left Narrow Guide Rail After Split", LaneBCenterX - 0.28f, SplitGuideExitZ, MainConveyorEndZ, metalMaterial);
 
             CreateHorizontalNeckSupportRail(parent, "Infeed Neck Support Rail", InfeedTurntableBottleCenter.x + 0.65f, StarWheelPocketPosition(0, FillingStarWheelBottleCenter.y).x, FillingStarWheelBottleCenter.z, 1.64f, 1.41f, metalMaterial, true, true);
             CreateAirBlower(parent, metalMaterial, sensorMaterial);
             // Outfeed neck support rail is disabled while the star wheel exit rail is being redesigned.
         }
 
-        private void CreateMainConveyorGuideRail(Transform parent, string name, float x, float conveyorMaxZ, Material metalMaterial)
+        private void CreateSlatConveyorLane(Transform parent, string laneName, float centerX, float conveyorStartZ, float conveyorEndZ, Material beltMaterial, Material metalMaterial, Material slatMaterial, Material ribMaterial)
         {
-            const float pusherGapCenterZ = 1.15f;
-            const float pusherGapLength = 0.92f;
-            var gapEndZ = pusherGapCenterZ + pusherGapLength * 0.5f;
+            const float pitch = 0.22f;
+            const float slatLength = 0.17f;
+            var conveyorLength = conveyorEndZ - conveyorStartZ;
+            var conveyorCenterZ = (conveyorStartZ + conveyorEndZ) * 0.5f;
+            CreateCube(parent, $"{laneName} Slat Chain Conveyor Base", new Vector3(centerX, 0.38f, conveyorCenterZ), new Vector3(0.52f, 0.08f, conveyorLength), beltMaterial);
+            CreateCube(parent, $"{laneName} Narrow Conveyor Support", new Vector3(centerX, 0.2f, conveyorCenterZ), new Vector3(0.68f, 0.15f, conveyorLength + 0.2f), metalMaterial);
 
-            CreateGuideRailSegment(parent, $"{name} After Pusher Gap", x, gapEndZ, conveyorMaxZ, metalMaterial);
+            var slatCount = Mathf.CeilToInt(conveyorLength / pitch);
+            var movingParts = new List<Transform>();
+            for (var i = 0; i < slatCount; i++)
+            {
+                var z = conveyorStartZ + i * pitch;
+                movingParts.Add(CreateCube(parent, $"{laneName} Modular Slat Plate", new Vector3(centerX, 0.46f, z), new Vector3(0.46f, 0.035f, slatLength), slatMaterial).transform);
+                movingParts.Add(CreateCube(parent, $"{laneName} Slat Gap Shadow", new Vector3(centerX, 0.482f, z + slatLength * 0.5f + 0.017f), new Vector3(0.47f, 0.012f, 0.028f), beltMaterial).transform);
+
+                if (i % 2 == 0)
+                {
+                    movingParts.Add(CreateCube(parent, $"{laneName} Anti Slip Cross Rib", new Vector3(centerX, 0.515f, z - 0.055f), new Vector3(0.42f, 0.026f, 0.022f), ribMaterial).transform);
+                }
+            }
+
+            CreateConveyorAnimator(parent, $"{laneName} Slat Chain Motion", movingParts, Vector3.forward, 0.85f, conveyorStartZ - pitch, conveyorStartZ + slatCount * pitch);
         }
 
         private void CreateGuideRailSegment(Transform parent, string name, float x, float startZ, float endZ, Material material)
@@ -294,7 +306,7 @@ namespace ConveyorTwin
             CreateCube(parent, name, new Vector3(x, 0.74f, centerZ), new Vector3(0.035f, 0.1f, length), material);
         }
 
-        private void CreateConveyorAnimator(Transform parent, string name, List<Transform> movingParts, Vector3 worldAxis, float speedMps, float minCoordinate, float maxCoordinate)
+        private SlatChainConveyorAnimator CreateConveyorAnimator(Transform parent, string name, List<Transform> movingParts, Vector3 worldAxis, float speedMps, float minCoordinate, float maxCoordinate)
         {
             var animatorObject = new GameObject(name);
             animatorObject.transform.SetParent(parent);
@@ -304,6 +316,7 @@ namespace ConveyorTwin
             animator.speedMps = speedMps;
             animator.minCoordinate = minCoordinate;
             animator.maxCoordinate = maxCoordinate;
+            return animator;
         }
 
         private void CreateHorizontalNeckSupportRail(Transform parent, string namePrefix, float startX, float endX, float z, float startY, float endY, Material material, bool shortenRightRail = false, bool createSupports = true)
@@ -619,34 +632,46 @@ namespace ConveyorTwin
             return CreateCube(parent, "Pneumatic Pusher", new Vector3(0.43f, 0.78f, 0.85f), new Vector3(0.1f, 0.32f, 0.42f), rejectMaterial).transform;
         }
 
-        private (Transform turntable, Transform sensor, Transform inletGate, Transform outletGate, Transform carton, Transform cartonPusher) CreateAccumulationTurntableStation(Transform parent, Material metalMaterial, Material sensorMaterial, Material cartonMaterial)
+        private (Transform sensor, Transform guidePivot, Transform carton, Transform pusher) CreateSplitterAndPackingStation(Transform parent, Material metalMaterial, Material sensorMaterial, Material cartonMaterial)
         {
-            var turntableParts = CreateTurntableVisual(parent, metalMaterial, AccumulationTurntableCenter, "Accumulation");
+            var sensor = CreateCube(parent, "Split Counting Sensor", new Vector3(0f, 0.92f, SplitSensorZ), new Vector3(0.86f, 0.035f, 0.035f), sensorMaterial).transform;
+            CreateCube(parent, "Split Sensor Head Left", new Vector3(-0.46f, 0.96f, SplitSensorZ), new Vector3(0.14f, 0.24f, 0.14f), metalMaterial);
+            CreateCube(parent, "Split Sensor Head Right", new Vector3(0.46f, 0.96f, SplitSensorZ), new Vector3(0.14f, 0.24f, 0.14f), metalMaterial);
+            CreateFloorSupportLeg(parent, "Split Sensor Head Left Floor Support", new Vector3(-0.46f, 0.84f, SplitSensorZ), metalMaterial);
+            CreateFloorSupportLeg(parent, "Split Sensor Head Right Floor Support", new Vector3(0.46f, 0.84f, SplitSensorZ), metalMaterial);
 
-            var sensor = CreateCube(parent, "Accumulation Inlet Counting Sensor", new Vector3(0f, 0.92f, 3.58f), new Vector3(0.86f, 0.035f, 0.035f), sensorMaterial).transform;
-            CreateCube(parent, "Accumulation Sensor Head Left", new Vector3(-0.46f, 0.96f, 3.58f), new Vector3(0.14f, 0.24f, 0.14f), metalMaterial);
-            CreateCube(parent, "Accumulation Sensor Head Right", new Vector3(0.46f, 0.96f, 3.58f), new Vector3(0.14f, 0.24f, 0.14f), metalMaterial);
-            CreateFloorSupportLeg(parent, "Accumulation Sensor Head Left Floor Support", new Vector3(-0.46f, 0.84f, 3.58f), metalMaterial);
-            CreateFloorSupportLeg(parent, "Accumulation Sensor Head Right Floor Support", new Vector3(0.46f, 0.84f, 3.58f), metalMaterial);
+            var pivotObject = new GameObject("A/B Split Guide Pivot");
+            pivotObject.transform.SetParent(parent);
+            pivotObject.transform.position = new Vector3(-0.28f, 0.74f, SplitGuideZ);
+            var guide = CreateCube(pivotObject.transform, "A/B Split Guide", pivotObject.transform.position + new Vector3(0f, 0.02f, 0.32f), new Vector3(0.04f, 0.11f, 0.64f), metalMaterial).transform;
+            guide.localPosition = new Vector3(0f, 0.02f, 0.32f);
+            CreateCube(parent, "A/B Split Guide Pneumatic Cylinder", new Vector3(-0.43f, 0.77f, SplitGuideZ - 0.16f), new Vector3(0.12f, 0.18f, 0.34f), metalMaterial);
+            CreateFloorSupportLeg(parent, "A/B Split Guide Floor Support", new Vector3(-0.28f, 0.69f, SplitGuideZ), metalMaterial);
 
-            var inletGate = CreateCube(parent, "Accumulation Inlet Gate", new Vector3(0f, 0.93f, 3.86f), new Vector3(0.64f, 0.24f, 0.055f), metalMaterial).transform;
-            CreateCube(parent, "Accumulation Outlet Guide", new Vector3(1.05f, 0.62f, AccumulationTurntableCenter.z), new Vector3(0.5f, 0.06f, 0.72f), metalMaterial);
-            var carton = CreateCartonBox(parent, "Active Carton Box", new Vector3(1.38f, 0.58f, AccumulationTurntableCenter.z), cartonMaterial);
-            var cartonPusher = CreateCube(parent, "Carton Discharge Pusher", new Vector3(0.78f, 0.58f, AccumulationTurntableCenter.z), new Vector3(0.12f, 0.44f, 0.86f), metalMaterial).transform;
+            var packCenterZ = PackCartonCenter.z;
+            CreateCube(parent, "A Pack Zone Backstop", new Vector3(0f, 0.74f, PackFrontRowZ + 0.16f), new Vector3(0.52f, 0.12f, 0.05f), metalMaterial);
+            CreateCube(parent, "B Pack Zone Backstop", new Vector3(LaneBCenterX, 0.74f, PackFrontRowZ + 0.16f), new Vector3(0.52f, 0.12f, 0.05f), metalMaterial);
+            CreateCube(parent, "A Pack Zone Side Guide", new Vector3(-0.31f, 0.74f, packCenterZ), new Vector3(0.035f, 0.10f, 1.34f), metalMaterial);
+            CreateCube(parent, "B Pack Zone Side Guide", new Vector3(LaneBCenterX + 0.31f, 0.74f, packCenterZ), new Vector3(0.035f, 0.10f, 1.34f), metalMaterial);
 
-            return (turntableParts.turntable, sensor, inletGate, turntableParts.outletGate, carton, cartonPusher);
+            var carton = CreateCartonBox(parent, "Active Six-Pack Carton", PackCartonCenter, new Vector2(1.04f, 1.38f), cartonMaterial);
+            var pusher = CreateCube(parent, "Six-Pack Carton Pusher", new Vector3(-0.24f, 0.78f, packCenterZ), new Vector3(0.12f, 0.42f, 1.32f), metalMaterial).transform;
+
+            return (sensor, pivotObject.transform, carton, pusher);
         }
 
-        private Transform CreateCartonBox(Transform parent, string name, Vector3 center, Material material)
+        private Transform CreateCartonBox(Transform parent, string name, Vector3 center, Vector2 footprint, Material material)
         {
             var cartonRoot = new GameObject(name);
             cartonRoot.transform.SetParent(parent);
             cartonRoot.transform.position = center;
-            CreateCube(cartonRoot.transform, "Carton Bottom", center + new Vector3(0f, -0.23f, 0f), new Vector3(0.9f, 0.06f, 0.72f), material);
-            CreateCube(cartonRoot.transform, "Carton Front Wall", center + new Vector3(0f, 0f, -0.36f), new Vector3(0.9f, 0.46f, 0.05f), material);
-            CreateCube(cartonRoot.transform, "Carton Back Wall", center + new Vector3(0f, 0f, 0.36f), new Vector3(0.9f, 0.46f, 0.05f), material);
-            CreateCube(cartonRoot.transform, "Carton Left Wall", center + new Vector3(-0.45f, 0f, 0f), new Vector3(0.05f, 0.46f, 0.72f), material);
-            CreateCube(cartonRoot.transform, "Carton Right Wall", center + new Vector3(0.45f, 0f, 0f), new Vector3(0.05f, 0.46f, 0.72f), material);
+            var halfX = footprint.x * 0.5f;
+            var halfZ = footprint.y * 0.5f;
+            CreateCube(cartonRoot.transform, "Carton Bottom", center + new Vector3(0f, -0.23f, 0f), new Vector3(footprint.x, 0.06f, footprint.y), material);
+            CreateCube(cartonRoot.transform, "Carton Front Wall", center + new Vector3(0f, 0f, -halfZ), new Vector3(footprint.x, 0.46f, 0.05f), material);
+            CreateCube(cartonRoot.transform, "Carton Back Wall", center + new Vector3(0f, 0f, halfZ), new Vector3(footprint.x, 0.46f, 0.05f), material);
+            CreateCube(cartonRoot.transform, "Carton Left Wall", center + new Vector3(-halfX, 0f, 0f), new Vector3(0.05f, 0.46f, footprint.y), material);
+            CreateCube(cartonRoot.transform, "Carton Right Wall", center + new Vector3(halfX, 0f, 0f), new Vector3(0.05f, 0.46f, footprint.y), material);
             return cartonRoot.transform;
         }
 
@@ -1097,24 +1122,6 @@ namespace ConveyorTwin
             compressor.GetComponent<Renderer>().sharedMaterial = redMaterial;
         }
 
-        private void CreateFinishedBottleAccumulationTable(Transform parent, Material metalMaterial, Material bottleMaterial, Material waterMaterial, Material capMaterial, Material labelMaterial)
-        {
-            CreateCube(parent, "Finished Bottle Accumulation Table", new Vector3(1.18f, 0.34f, 4.35f), new Vector3(2.3f, 0.08f, 1.15f), metalMaterial);
-            for (var i = 0; i < 14; i++)
-            {
-                var col = i % 7;
-                var row = i / 7;
-                var bottle = CreateBottleTemplate(parent, bottleMaterial, waterMaterial, capMaterial, labelMaterial);
-                bottle.name = $"Finished Blue Bottle Prop {i + 1}";
-                bottle.transform.position = new Vector3(0.42f + col * 0.24f, 0.82f, 4.0f + row * 0.34f);
-                bottle.gameObject.SetActive(true);
-                bottle.SetVolume(1f);
-                bottle.capPlaced = true;
-                bottle.cappingCompleted = true;
-                bottle.RefreshVisuals();
-            }
-        }
-
         private GameObject CreateCube(Transform parent, string name, Vector3 position, Vector3 scale, Material material)
         {
             var cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
@@ -1170,6 +1177,7 @@ namespace ConveyorTwin
         public float speedMps = 0.85f;
         public float minCoordinate;
         public float maxCoordinate = 1f;
+        public FillingFilteringDigitalTwin speedSource;
 
         private void Update()
         {
@@ -1178,9 +1186,15 @@ namespace ConveyorTwin
                 return;
             }
 
+            if (speedSource != null && speedSource.SplitConveyorPaused)
+            {
+                return;
+            }
+
             var axis = worldAxis.sqrMagnitude > 0.0001f ? worldAxis.normalized : Vector3.forward;
             var loopLength = Mathf.Max(0.01f, maxCoordinate - minCoordinate);
-            var delta = axis * (speedMps * Time.deltaTime);
+            var activeSpeed = speedSource != null ? speedSource.ConveyorEffectiveSpeedMps : speedMps;
+            var delta = axis * (activeSpeed * Time.deltaTime);
 
             foreach (var part in movingParts)
             {

@@ -1,6 +1,6 @@
 # Digital Twin: Filling & Filtering Line
 
-Project Unity mô phỏng dây chuyền **filling & filtering** chai nước ở mức Digital Model / Digital Shadow. Mô hình tập trung vào luồng chai thực tế: cấp chai bằng turntable, đưa vào star wheel để rót và đóng nắp, kiểm tra QC, loại chai lỗi, rồi gom chai đạt vào accumulation turntable cuối line để đóng thùng.
+Project Unity mô phỏng dây chuyền **filling & filtering** chai nước ở mức Digital Model / Digital Shadow. Mô hình tập trung vào luồng chai thực tế: cấp chai bằng turntable, đưa vào star wheel để rót và đóng nắp, kiểm tra QC, loại chai lỗi, tách chai đạt sang hai lane A/B, rồi đóng pack 6 chai.
 
 Scene chính:
 
@@ -40,7 +40,7 @@ Tools > Conveyor Twin > Build Demo Scene
 
 5. Bấm **Play**.
 
-Khi chạy, chai sẽ rơi vào infeed turntable, ra conveyor hẹp dạng slat chain, vào star wheel để fill và đóng nắp, đi qua QC, chai lỗi bị piston đẩy khỏi line rồi ẩn khỏi scene, chai đạt đi tiếp vào accumulation turntable cuối line và được chuyển vào thùng carton theo batch.
+Khi chạy, chai sẽ rơi vào infeed turntable, ra conveyor hẹp dạng slat chain, vào star wheel để fill và đóng nắp, đi qua QC, chai lỗi bị piston đẩy khỏi line rồi ẩn khỏi scene. Chai đạt được chia nhịp ba chai vào A, ba chai vào B, giữ thành grid 3 x 2 ở pack zone và được piston đẩy vào carton.
 
 ## 1. Bottle Infeed Station
 
@@ -175,35 +175,33 @@ Digital Twin Data:
 
 - `Total Rejected`: tổng chai lỗi.
 
-## 6. Accumulation & Carton Packing Station
+## 6. Dual-Lane Splitter & Six-Pack Carton Station
 
 Thiết bị:
 
 ```text
-Accumulation Turntable
-Accumulation Inlet Counting Sensor
-Inlet Gate
-Outlet Gate
-Carton Box
-Carton Discharge Pusher
+A Slat Chain Conveyor
+B Slat Chain Conveyor
+Split Counting Sensor
+A/B Split Guide
+Six-Pack Carton Pusher
+3 x 2 Carton Box
 ```
-
-`Accumulation Turntable` uses the same geometry and dimensions as `Infeed Turntable`; only its station position and process role are different.
 
 Logic vận hành:
 
-- Chai đạt sau QC đi đến cảm biến trước cổng vào accumulation turntable.
-- Sensor tăng `AccumulationEntryCount` mỗi khi một chai đi vào.
-- Chai được đưa vào `Accumulation Turntable` và xoay tích trữ như một buffer cuối line.
-- Chai trong turntable được quay và dạt dần ra ngoài theo lực ly tâm `a_c = omega^2 * r`.
-- Chỉ khi chai đi tới cửa outlet và rơi vào `Active Carton Box` thì mới tăng `Total Passed` và bộ đếm carton.
-- Khi đủ `accumulationBatchSize = 6` chai đã rơi vào thùng, `Inlet Gate` đóng, `Carton Discharge Pusher` đẩy thùng đầy ra ngoài.
-- Hệ thống reset thùng rỗng mới rồi mở lại cổng vào.
+- Conveyor A được kéo dài theo +Z; conveyor B bắt đầu tại `x = 0.62`, `z = 4.47733736` và chạy cùng chiều +Z.
+- `Split Counting Sensor` gán cố định từng chai theo chuỗi `A,A,A,B,B,B`, bắt đầu bằng A.
+- `A/B Split Guide` mặc định song song với rail trái để chai vào A. Khi tới nhóm B, guide nghiêng chéo để dẫn chai qua B rồi quay về trạng thái A.
+- Guide chỉ đổi sau khi chai cuối nhóm trước đã qua mặt gạt. Thời điểm chuyển được kiểm tra theo khoảng cách sensor-guide, tốc độ conveyor, bottle pitch và thời gian actuator 0.08 s; nếu không đủ an toàn, conveyor tạm dừng tại ranh giới nhóm.
+- Mỗi lane giữ ba chai ở pack zone. Khi đủ sáu chai ở grid 3 theo Z x 2 theo X, piston ngang đẩy cả cụm vào carton.
+- Carton đầy đi ra phía +X, một carton trống được trả về cho chu kỳ tiếp theo. `Total Passed` chỉ tăng khi carton đã hoàn tất.
 
 Digital Twin Data:
 
-- `Accumulation Buffer`: số chai đang chờ trong turntable cuối.
-- `Sensor Count`: tổng số chai đã vào turntable cuối.
+- `Split Sensor Count`: số chai đã qua cảm biến tách lane.
+- `Pack Zone A/B`: số chai đã giữ trong từng lane, tối đa 3 chai mỗi lane.
+- `Split Guide State`: guide đang song song (A) hay nghiêng chéo (B), cùng trạng thái safety hold.
 - `Cartons`: số thùng carton đã đóng xong.
 - `Total Passed`: tổng chai đạt.
 
@@ -219,7 +217,7 @@ HUD trong game hiển thị:
 - Số chai ở filling/capping.
 - Vessel liquid level và filling time.
 - Inspection status.
-- Accumulation buffer, inlet/outlet gate state, cartons filled.
+- Split sensor, guide state, pack-zone A/B và cartons filled.
 - Total passed / rejected.
 
 ## Công thức và logic mô phỏng
@@ -272,20 +270,18 @@ after filling:
 release bottle back to straight conveyor
 ```
 
-Logic accumulation cuối line:
+Logic splitter và pack cuối line:
 
 ```text
-if capped passed bottle reaches accumulation sensor:
-    move bottle into accumulation turntable
-while bottle is inside accumulation turntable:
-    rotate turntable
-    radius += centrifugal_acceleration * dt
-    if radius reaches outlet and bottle falls into carton:
-        count passed bottle
-if carton bottle count >= 6:
-    close inlet gate
-    push full carton away
-    reset empty carton
+when capped bottle crosses split sensor:
+    assign A,A,A,B,B,B and repeat
+when the previous bottle clears the guide pivot:
+    move guide to the next assigned lane
+if speed or bottle gap cannot complete the guide stroke safely:
+    pause the conveyor at the group boundary
+when A and B each hold 3 bottles in the pack zone:
+    push the 3 x 2 grid into the carton
+    move the filled carton out on +X and reset an empty carton
 ```
 
 ## File quan trọng

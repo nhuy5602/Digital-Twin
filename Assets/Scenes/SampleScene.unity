@@ -19205,7 +19205,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e8a6738a1e514c04aa4b815bb6a3f8b2, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ConveyorTwin.ConveyorDemoRuntimeBootstrap
-  rebuildOnEnable: 0
+  rebuildOnEnable: 1
 --- !u!4 &821555399
 Transform:
   m_ObjectHideFlags: 0
