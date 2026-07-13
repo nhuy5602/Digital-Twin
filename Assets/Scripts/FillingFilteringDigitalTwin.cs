@@ -41,6 +41,10 @@ namespace ConveyorTwin
         public Transform splitGuidePivot;
         public Transform packCarton;
         public Transform packPusher;
+        public Transform packStopGateA;
+        public Transform packStopGateB;
+        public Transform packGateSensorA;
+        public Transform packGateSensorB;
 
         [Header("Bottle line")]
         public BottleProcessState bottleTemplate;
@@ -123,8 +127,11 @@ namespace ConveyorTwin
         public float splitGuideAngleDegrees = 42f;
         public float splitterSafetyGapM = 0.03f;
         public float packFrontRowZ = 7.12f;
-        public float packRowPitchM = 0.4555f;
-        public float packIndexSeconds = 0.22f;
+        public float packRowPitchM = 0.235f;
+        public float packGateZ = 6.41f;
+        public float packGateSensorZ = 6.57f;
+        public float packGateOpenY = 0.38f;
+        public float packGateClosedY = 0.82f;
         public float packPusherSeconds = 0.52f;
         public float packCartonExitSeconds = 0.55f;
         public Vector3 packCartonLoadPosition = new Vector3(1.41f, 0.58f, 6.6645f);
@@ -190,6 +197,11 @@ namespace ConveyorTwin
         public int LaneBPackCount => packLaneBBottles.Count;
         public int PackBottleCount => LaneAPackCount + LaneBPackCount;
         public int CartonsFilled { get; private set; }
+        public int PackGateSensorCountA { get; private set; }
+        public int PackGateSensorCountB { get; private set; }
+        public bool PackGateAClosed => IsPackGateClosed(SplitLane.A);
+        public bool PackGateBClosed => IsPackGateClosed(SplitLane.B);
+        public bool PackPusherActive => packLoadingOut;
         public bool SplitterSafetyInterlocked { get; private set; }
         public bool SplitConveyorPaused => splitterPaused;
         public string SplitGuideState => splitGuideLane == SplitLane.A ? "A / parallel" : "B / diagonal";
@@ -229,8 +241,6 @@ namespace ConveyorTwin
         private SplitLane nextSplitLane = SplitLane.A;
         private SplitLane splitGuideLane = SplitLane.A;
         private int bottlesInSplitGroup;
-        private int packLaneAReservations;
-        private int packLaneBReservations;
         private bool splitGuideMoving;
         private bool splitterPaused;
         private bool packLoadingOut;
@@ -265,10 +275,12 @@ namespace ConveyorTwin
             AnimateMachines();
             UpdateTurntableBuffer();
             UpdateSplitterGuide();
+            UpdatePackStopGateVisuals();
             // Filling stop gate is disabled so the conveyor and star wheel stay visually unobstructed.
             UpdateVesselVisual();
             RecoverStarWheelLocks();
             MoveBottles();
+            TryStartSixPackDischarge();
             TryStartStarWheelFeedFromRail();
             ThroughputBottlesPerHour = completedCount / Mathf.Max(Time.time / 3600f, 0.0001f);
             TurntableBufferCount = turntableBottles.Count;
@@ -305,6 +317,9 @@ namespace ConveyorTwin
                 scale.x = 1f + Mathf.Sin(Time.time * 12f) * 0.06f;
                 splitSensorBeam.localScale = scale;
             }
+
+            PulsePackGateSensor(packGateSensorA, 0f);
+            PulsePackGateSensor(packGateSensorB, 0.5f);
 
             // The star wheel visual is indexed by coroutine so bottles stay aligned with pockets.
         }
@@ -422,6 +437,8 @@ namespace ConveyorTwin
             neckRailSlideSpeeds.Remove(bottle);
             splitLaneAssignments.Remove(bottle);
             splitGuidePassedBottles.Remove(bottle);
+            packLaneABottles.Remove(bottle);
+            packLaneBBottles.Remove(bottle);
             packingBottles.Remove(bottle);
             bottles.Add(bottle);
         }
@@ -740,22 +757,6 @@ namespace ConveyorTwin
                         AssignBottleToSplitLane(bottle);
                     }
 
-                    if (splitLaneAssignments.TryGetValue(bottle, out assignedLane) && position.z >= PackZoneEntryZ)
-                    {
-                        if (CanAcceptBottleIntoPack(assignedLane))
-                        {
-                            StartCoroutine(MoveBottleIntoPackZone(bottle, assignedLane));
-                        }
-                        else
-                        {
-                            position.z = Mathf.Max(position.z, PackZoneEntryZ);
-                            position.x = ResolveLaneX(assignedLane, position.z);
-                            bottle.transform.position = position;
-                        }
-
-                        continue;
-                    }
-
                     if (splitterPaused && position.z >= splitSensorZ - turntableBottleRadius)
                     {
                         bottle.transform.position = position;
@@ -763,7 +764,27 @@ namespace ConveyorTwin
                     }
                 }
 
-                position.z += ConveyorEffectiveSpeedMps * Time.deltaTime;
+                var candidateZ = position.z + ConveyorEffectiveSpeedMps * Time.deltaTime;
+                if (splitLaneAssignments.TryGetValue(bottle, out assignedLane))
+                {
+                    if (!IsBottleInPack(bottle) && position.z >= packGateSensorZ && CanAcceptBottleIntoPack(assignedLane))
+                    {
+                        RegisterBottleInPack(bottle, assignedLane);
+                    }
+
+                    if (IsBottleInPack(bottle))
+                    {
+                        // Pack bottles retain conveyor motion; the backstop and bottle spacing, not an interpolation,
+                        // establish their 3 x 2 grid.
+                        candidateZ = Mathf.Min(candidateZ, packFrontRowZ);
+                    }
+                    else if (IsPackGateClosed(assignedLane))
+                    {
+                        candidateZ = Mathf.Min(candidateZ, PackGateHoldZ);
+                    }
+                }
+
+                position.z = candidateZ;
                 position.z = KeepBottleSpacing(bottle, position.z);
                 if (splitLaneAssignments.TryGetValue(bottle, out assignedLane))
                 {
@@ -882,6 +903,7 @@ namespace ConveyorTwin
             for (var guard = 0; guard < lineBottles.Count; guard++)
             {
                 var nearestAheadZ = float.PositiveInfinity;
+                BottleProcessState nearestAheadBottle = null;
                 foreach (var otherBottle in lineBottles)
                 {
                     if (otherBottle == null || otherBottle == currentBottle || fillingBottles.Contains(otherBottle))
@@ -898,6 +920,7 @@ namespace ConveyorTwin
                     if (otherZ >= resolvedZ - 0.001f && otherZ < nearestAheadZ)
                     {
                         nearestAheadZ = otherZ;
+                        nearestAheadBottle = otherBottle;
                     }
                 }
 
@@ -906,7 +929,7 @@ namespace ConveyorTwin
                     return resolvedZ;
                 }
 
-                var spacedZ = nearestAheadZ - ConveyorBottleSpacingM;
+                var spacedZ = nearestAheadZ - RequiredBottleSpacing(currentBottle, nearestAheadBottle);
                 if (resolvedZ <= spacedZ + 0.001f)
                 {
                     return resolvedZ;
@@ -916,6 +939,13 @@ namespace ConveyorTwin
             }
 
             return Mathf.Max(currentZ, resolvedZ);
+        }
+
+        private float RequiredBottleSpacing(BottleProcessState currentBottle, BottleProcessState otherBottle)
+        {
+            return IsBottleInPack(currentBottle) || IsBottleInPack(otherBottle)
+                ? PackRowPitch
+                : ConveyorBottleSpacingM;
         }
 
         private SplitLane ResolveSpacingLane(BottleProcessState bottle, float z)
@@ -2482,8 +2512,8 @@ namespace ConveyorTwin
             }
         }
 
-        private float PackZoneEntryZ => packFrontRowZ - PackRowPitch * 2f - 0.10f;
-        private float PackRowPitch => Mathf.Max(packRowPitchM, turntableBottleRadius * 2f + splitterSafetyGapM);
+        private float PackRowPitch => Mathf.Max(packRowPitchM, turntableBottleRadius * 2f + 0.015f);
+        private float PackGateHoldZ => packGateZ - turntableBottleRadius - 0.01f;
 
         private void AssignBottleToSplitLane(BottleProcessState bottle)
         {
@@ -2595,69 +2625,105 @@ namespace ConveyorTwin
 
         private bool CanAcceptBottleIntoPack(SplitLane lane)
         {
-            if (packLoadingOut)
-            {
-                return false;
-            }
-
-            return lane == SplitLane.A
-                ? packLaneABottles.Count + packLaneAReservations < 3
-                : packLaneBBottles.Count + packLaneBReservations < 3;
+            return !packLoadingOut && PackLaneBottles(lane).Count < 3;
         }
 
-        private IEnumerator MoveBottleIntoPackZone(BottleProcessState bottle, SplitLane lane)
+        private List<BottleProcessState> PackLaneBottles(SplitLane lane)
         {
-            if (bottle == null || !packingBottles.Add(bottle))
+            return lane == SplitLane.A ? packLaneABottles : packLaneBBottles;
+        }
+
+        private bool IsBottleInPack(BottleProcessState bottle)
+        {
+            return bottle != null && (packLaneABottles.Contains(bottle) || packLaneBBottles.Contains(bottle));
+        }
+
+        private bool IsPackGateClosed(SplitLane lane)
+        {
+            return packLoadingOut || PackLaneBottles(lane).Count >= 3;
+        }
+
+        private void RegisterBottleInPack(BottleProcessState bottle, SplitLane lane)
+        {
+            if (bottle == null || IsBottleInPack(bottle) || !CanAcceptBottleIntoPack(lane))
             {
-                yield break;
+                return;
             }
 
-            var isLaneA = lane == SplitLane.A;
-            var slotIndex = (isLaneA ? packLaneABottles.Count + packLaneAReservations : packLaneBBottles.Count + packLaneBReservations);
-            if (slotIndex >= 3)
+            PackLaneBottles(lane).Add(bottle);
+            if (lane == SplitLane.A)
             {
-                packingBottles.Remove(bottle);
-                yield break;
-            }
-
-            if (isLaneA)
-            {
-                packLaneAReservations++;
+                PackGateSensorCountA++;
             }
             else
             {
-                packLaneBReservations++;
+                PackGateSensorCountB++;
             }
 
-            lineBottles.Remove(bottle);
-            var start = bottle.transform.position;
-            var target = PackBottleSlot(lane, slotIndex);
-            yield return MoveBottleToChute(bottle, start, target, packIndexSeconds, 0f);
-
-            if (isLaneA)
-            {
-                packLaneAReservations = Mathf.Max(0, packLaneAReservations - 1);
-                packLaneABottles.Add(bottle);
-            }
-            else
-            {
-                packLaneBReservations = Mathf.Max(0, packLaneBReservations - 1);
-                packLaneBBottles.Add(bottle);
-            }
-
-            packingBottles.Remove(bottle);
-            if (packLaneABottles.Count == 3 && packLaneBBottles.Count == 3 && !packLoadingOut)
-            {
-                StartCoroutine(DischargeFullSixPack());
-            }
         }
 
-        private Vector3 PackBottleSlot(SplitLane lane, int row)
+        private void TryStartSixPackDischarge()
         {
-            return new Vector3(
-                lane == SplitLane.A ? lineX : laneBCenterX,
-                0.92f,
-                packFrontRowZ - row * PackRowPitch);
+            if (packLoadingOut || packLaneABottles.Count != 3 || packLaneBBottles.Count != 3)
+            {
+                return;
+            }
+
+            if (!IsPackLaneReadyForPush(packLaneABottles) || !IsPackLaneReadyForPush(packLaneBBottles))
+            {
+                return;
+            }
+
+            StartCoroutine(DischargeFullSixPack());
+        }
+
+        private bool IsPackLaneReadyForPush(List<BottleProcessState> laneBottles)
+        {
+            for (var row = 0; row < laneBottles.Count; row++)
+            {
+                var bottle = laneBottles[row];
+                if (bottle == null || bottle.transform.position.z < PackBottleRestZ(row) - 0.01f)
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private float PackBottleRestZ(int row)
+        {
+            return packFrontRowZ - row * PackRowPitch;
+        }
+
+        private void UpdatePackStopGateVisuals()
+        {
+            SetPackStopGateVisual(packStopGateA, IsPackGateClosed(SplitLane.A));
+            SetPackStopGateVisual(packStopGateB, IsPackGateClosed(SplitLane.B));
+        }
+
+        private void SetPackStopGateVisual(Transform gate, bool closed)
+        {
+            if (gate == null)
+            {
+                return;
+            }
+
+            var position = gate.position;
+            position.y = closed ? packGateClosedY : packGateOpenY;
+            gate.position = position;
+        }
+
+        private void PulsePackGateSensor(Transform sensor, float phaseOffset)
+        {
+            if (sensor == null)
+            {
+                return;
+            }
+
+            var scale = sensor.localScale;
+            scale.x = 0.52f * (1f + Mathf.Sin(Time.time * 13f + phaseOffset) * 0.06f);
+            sensor.localScale = scale;
         }
 
         private Vector3 PackCartonSlot(SplitLane lane, int row)
@@ -2669,9 +2735,21 @@ namespace ConveyorTwin
         private IEnumerator DischargeFullSixPack()
         {
             packLoadingOut = true;
+            UpdatePackStopGateVisuals();
             var batch = new List<BottleProcessState>();
             batch.AddRange(packLaneABottles);
             batch.AddRange(packLaneBBottles);
+            foreach (var bottle in batch)
+            {
+                if (bottle == null)
+                {
+                    continue;
+                }
+
+                packingBottles.Add(bottle);
+                lineBottles.Remove(bottle);
+            }
+
             var bottleStarts = new List<Vector3>();
             var bottleTargets = new List<Vector3>();
             for (var i = 0; i < batch.Count; i++)
@@ -2732,6 +2810,7 @@ namespace ConveyorTwin
                 bottle.status = BottleQualityStatus.AcceptedBin;
                 bottle.RefreshVisuals();
                 CountBottle(bottle, true);
+                packingBottles.Remove(bottle);
                 bottle.gameObject.SetActive(false);
             }
 
@@ -2749,6 +2828,7 @@ namespace ConveyorTwin
             packLaneBBottles.Clear();
             CartonsFilled++;
             packLoadingOut = false;
+            UpdatePackStopGateVisuals();
         }
 
         private IEnumerator MoveCappingHeads(List<Transform> activeHeads, Vector3[] from, Vector3[] to, float duration)
@@ -2849,6 +2929,8 @@ namespace ConveyorTwin
             lineBottles.Remove(bottle);
             splitLaneAssignments.Remove(bottle);
             splitGuidePassedBottles.Remove(bottle);
+            packLaneABottles.Remove(bottle);
+            packLaneBBottles.Remove(bottle);
             packingBottles.Remove(bottle);
             completedCount++;
 

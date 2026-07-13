@@ -57,6 +57,11 @@ namespace ConveyorTwin
             DrawLine($"   Capping machine busy: {process.CappingActive} | Head speed: x{process.cappingSpeedMultiplier:0} starwheel");
             DrawLine($"4. Split sensor: {process.SplitSensorCount} | Guide: {process.SplitGuideState} | Safety hold: {process.SplitterSafetyInterlocked}");
             DrawLine($"   Pack zone: A {process.LaneAPackCount}/3 | B {process.LaneBPackCount}/3 | Cartons: {process.CartonsFilled}");
+            var gateAState = process.PackGateAClosed ? "CLOSED" : "OPEN";
+            var gateBState = process.PackGateBClosed ? "CLOSED" : "OPEN";
+            var pusherState = process.PackPusherActive ? "ACTIVE" : "READY";
+            DrawLine($"   Pack gate sensors: A {process.PackGateSensorCountA} | B {process.PackGateSensorCountB} | Gates: A {gateAState}, B {gateBState}");
+            DrawLine($"   Six-pack pusher: {pusherState}");
             DrawLine($"5. Total passed: {process.TotalPassed}");
             DrawLine($"   Total rejected: {process.TotalRejected}");
             DrawLine($"Rule: volume >= 95% => PASSED, otherwise REJECTED");

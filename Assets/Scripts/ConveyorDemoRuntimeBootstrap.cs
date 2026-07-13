@@ -18,7 +18,9 @@ namespace ConveyorTwin
         private const float LaneBCenterX = 0.62f;
         private const float MainConveyorEndZ = 7.65f;
         private const float PackFrontRowZ = 7.12f;
-        private const float PackRowPitch = 0.4555f;
+        private const float PackRowPitch = 0.235f;
+        private const float PackGateZ = PackFrontRowZ - PackRowPitch * 2f - 0.24f;
+        private const float PackGateSensorZ = PackGateZ + 0.16f;
         private static readonly Vector3 PackCartonCenter = new Vector3(1.41f, 0.58f, PackFrontRowZ - PackRowPitch);
         private static readonly Vector3 ScallopedStarWheelDiscLocalPosition = new Vector3(0f, 1.485f, 0f);
         private static readonly Vector3 InfeedTurntableBottleCenter = new Vector3(-3.253f, 1.05f, FillingLineZ);
@@ -112,6 +114,10 @@ namespace ConveyorTwin
             process.splitGuidePivot = packingStation.guidePivot;
             process.packCarton = packingStation.carton;
             process.packPusher = packingStation.pusher;
+            process.packStopGateA = packingStation.stopGateA;
+            process.packStopGateB = packingStation.stopGateB;
+            process.packGateSensorA = packingStation.gateSensorA;
+            process.packGateSensorB = packingStation.gateSensorB;
             process.bottleTemplate = bottleTemplate;
             process.conveyorSpeedMps = 0.85f;
             process.slatPitchM = 0.22f;
@@ -140,6 +146,8 @@ namespace ConveyorTwin
             process.splitGuideMoveSeconds = 0.08f;
             process.packFrontRowZ = PackFrontRowZ;
             process.packRowPitchM = PackRowPitch;
+            process.packGateZ = PackGateZ;
+            process.packGateSensorZ = PackGateSensorZ;
             process.packCartonLoadPosition = PackCartonCenter;
             process.packCartonExitPosition = PackCartonCenter + new Vector3(1.15f, 0f, 0f);
             process.starWheelPocketCount = FillingStarWheelPocketCount;
@@ -632,7 +640,7 @@ namespace ConveyorTwin
             return CreateCube(parent, "Pneumatic Pusher", new Vector3(0.43f, 0.78f, 0.85f), new Vector3(0.1f, 0.32f, 0.42f), rejectMaterial).transform;
         }
 
-        private (Transform sensor, Transform guidePivot, Transform carton, Transform pusher) CreateSplitterAndPackingStation(Transform parent, Material metalMaterial, Material sensorMaterial, Material cartonMaterial)
+        private (Transform sensor, Transform guidePivot, Transform carton, Transform pusher, Transform stopGateA, Transform stopGateB, Transform gateSensorA, Transform gateSensorB) CreateSplitterAndPackingStation(Transform parent, Material metalMaterial, Material sensorMaterial, Material cartonMaterial)
         {
             var sensor = CreateCube(parent, "Split Counting Sensor", new Vector3(0f, 0.92f, SplitSensorZ), new Vector3(0.86f, 0.035f, 0.035f), sensorMaterial).transform;
             CreateCube(parent, "Split Sensor Head Left", new Vector3(-0.46f, 0.96f, SplitSensorZ), new Vector3(0.14f, 0.24f, 0.14f), metalMaterial);
@@ -651,13 +659,25 @@ namespace ConveyorTwin
             var packCenterZ = PackCartonCenter.z;
             CreateCube(parent, "A Pack Zone Backstop", new Vector3(0f, 0.74f, PackFrontRowZ + 0.16f), new Vector3(0.52f, 0.12f, 0.05f), metalMaterial);
             CreateCube(parent, "B Pack Zone Backstop", new Vector3(LaneBCenterX, 0.74f, PackFrontRowZ + 0.16f), new Vector3(0.52f, 0.12f, 0.05f), metalMaterial);
-            CreateCube(parent, "A Pack Zone Side Guide", new Vector3(-0.31f, 0.74f, packCenterZ), new Vector3(0.035f, 0.10f, 1.34f), metalMaterial);
-            CreateCube(parent, "B Pack Zone Side Guide", new Vector3(LaneBCenterX + 0.31f, 0.74f, packCenterZ), new Vector3(0.035f, 0.10f, 1.34f), metalMaterial);
+            CreateCube(parent, "A Pack Zone Side Guide", new Vector3(-0.31f, 0.74f, packCenterZ), new Vector3(0.035f, 0.10f, 0.90f), metalMaterial);
+            CreateCube(parent, "B Pack Zone Side Guide", new Vector3(LaneBCenterX + 0.31f, 0.74f, packCenterZ), new Vector3(0.035f, 0.10f, 0.90f), metalMaterial);
 
-            var carton = CreateCartonBox(parent, "Active Six-Pack Carton", PackCartonCenter, new Vector2(1.04f, 1.38f), cartonMaterial);
-            var pusher = CreateCube(parent, "Six-Pack Carton Pusher", new Vector3(-0.24f, 0.78f, packCenterZ), new Vector3(0.12f, 0.42f, 1.32f), metalMaterial).transform;
+            var gateSensorA = CreateCube(parent, "A Pack Stop Gate Sensor Beam", new Vector3(0f, 0.94f, PackGateSensorZ), new Vector3(0.52f, 0.035f, 0.035f), sensorMaterial).transform;
+            var gateSensorB = CreateCube(parent, "B Pack Stop Gate Sensor Beam", new Vector3(LaneBCenterX, 0.94f, PackGateSensorZ), new Vector3(0.52f, 0.035f, 0.035f), sensorMaterial).transform;
+            CreateCube(parent, "A Pack Stop Gate Sensor Outer Head", new Vector3(-0.37f, 0.96f, PackGateSensorZ), new Vector3(0.12f, 0.22f, 0.12f), metalMaterial);
+            CreateCube(parent, "B Pack Stop Gate Sensor Outer Head", new Vector3(LaneBCenterX + 0.37f, 0.96f, PackGateSensorZ), new Vector3(0.12f, 0.22f, 0.12f), metalMaterial);
+            CreateFloorSupportLeg(parent, "A Pack Stop Gate Sensor Support", new Vector3(-0.37f, 0.84f, PackGateSensorZ), metalMaterial);
+            CreateFloorSupportLeg(parent, "B Pack Stop Gate Sensor Support", new Vector3(LaneBCenterX + 0.37f, 0.84f, PackGateSensorZ), metalMaterial);
 
-            return (sensor, pivotObject.transform, carton, pusher);
+            var stopGateA = CreateCube(parent, "A Pack Stop Gate", new Vector3(0f, 0.38f, PackGateZ), new Vector3(0.54f, 0.08f, 0.055f), metalMaterial).transform;
+            var stopGateB = CreateCube(parent, "B Pack Stop Gate", new Vector3(LaneBCenterX, 0.38f, PackGateZ), new Vector3(0.54f, 0.08f, 0.055f), metalMaterial).transform;
+            CreateCube(parent, "A Pack Stop Gate Outer Actuator", new Vector3(-0.36f, 0.63f, PackGateZ), new Vector3(0.10f, 0.14f, 0.22f), metalMaterial);
+            CreateCube(parent, "B Pack Stop Gate Outer Actuator", new Vector3(LaneBCenterX + 0.36f, 0.63f, PackGateZ), new Vector3(0.10f, 0.14f, 0.22f), metalMaterial);
+
+            var carton = CreateCartonBox(parent, "Active Six-Pack Carton", PackCartonCenter, new Vector2(0.96f, 0.82f), cartonMaterial);
+            var pusher = CreateCube(parent, "Six-Pack Carton Pusher", new Vector3(-0.24f, 0.78f, packCenterZ), new Vector3(0.12f, 0.42f, 0.84f), metalMaterial).transform;
+
+            return (sensor, pivotObject.transform, carton, pusher, stopGateA, stopGateB, gateSensorA, gateSensorB);
         }
 
         private Transform CreateCartonBox(Transform parent, string name, Vector3 center, Vector2 footprint, Material material)
