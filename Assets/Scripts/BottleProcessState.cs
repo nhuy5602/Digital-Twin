@@ -4,17 +4,26 @@ namespace ConveyorTwin
 {
     public enum BottleQualityStatus
     {
-        Empty,
+        Empty = 0,
+        DroppingToTurntable = 1,
+        InTurntableBuffer = 2,
+        Filling = 4,
+        Filled = 5,
+        Passed = 6,
+        Capped = 7,
+        Rejected = 8,
+        AcceptedBin = 9,
+        RejectedBin = 10
+    }
+
+    public enum InfeedBottleState
+    {
+        None,
         DroppingToTurntable,
-        InTurntableBuffer,
-        MovingToOutlet,
-        Filling,
-        Filled,
-        Passed,
-        Capped,
-        Rejected,
-        AcceptedBin,
-        RejectedBin
+        OnTurntable,
+        TransitioningToNeckRail,
+        OnNeckRail,
+        OnStarWheel
     }
 
     public class BottleProcessState : MonoBehaviour
@@ -28,6 +37,7 @@ namespace ConveyorTwin
         public bool cappingCompleted;
         public bool counted;
         public Vector2 turntableVelocity;
+        public InfeedBottleState infeedState = InfeedBottleState.None;
         public Transform capVisual;
 
         [Header("Visuals")]
