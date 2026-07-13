@@ -335,8 +335,7 @@ namespace ConveyorTwin
             var rightRise = endY - rightStartY;
             var rightLength = Mathf.Sqrt(rightHorizontalLength * rightHorizontalLength + rightRise * rightRise);
             var rightCenterX = (rightStartX + endX) * 0.5f;
-            var rightCenterY = (rightStartY + endY) * 0.5f;
-            var rightRail = CreateCube(parent, $"{namePrefix} Right", new Vector3(rightCenterX, rightCenterY, z - railHalfGap), new Vector3(railWidth, railHeight, rightLength), material);
+            var rightRail = CreateCube(parent, $"{namePrefix} Right", new Vector3(rightCenterX, centerY, z - railHalfGap), new Vector3(railWidth, railHeight, rightLength), material);
             rightRail.transform.rotation = Quaternion.Euler(0f, 90f, pitchDegrees);
 
             if (!createSupports)
@@ -818,14 +817,18 @@ namespace ConveyorTwin
         {
             var exitPoint = StarWheelPocketPosition(FillingStarWheelPocketCount - 1, FillingStarWheelBottleCenter.y);
             var conveyorPoint = new Vector3(0f, FillingStarWheelBottleCenter.y, exitPoint.z + 0.22f);
-            var center = Vector3.Lerp(exitPoint, conveyorPoint, 0.5f);
             var length = Vector3.Distance(exitPoint, conveyorPoint);
             var yaw = Mathf.Atan2(conveyorPoint.x - exitPoint.x, conveyorPoint.z - exitPoint.z) * Mathf.Rad2Deg;
 
-            var leftRail = CreateCube(parent, "Star Wheel Exit Left Guide Rail", center + new Vector3(0.08f, 0.22f, -0.13f), new Vector3(0.035f, 0.08f, length), metalMaterial);
-            leftRail.transform.rotation = Quaternion.Euler(0f, yaw, 0f);
-            var rightRail = CreateCube(parent, "Star Wheel Exit Right Guide Rail", center + new Vector3(-0.08f, 0.22f, 0.13f), new Vector3(0.035f, 0.08f, length), metalMaterial);
-            rightRail.transform.rotation = Quaternion.Euler(0f, yaw, 0f);
+            var guidePosition = new Vector3(0.009f, 1.342f, -0.436f);
+            var guideRail = CreateCube(parent, "Star Wheel Exit Guide Rail", guidePosition, new Vector3(0.035f, 0.08f, length + 0.2f), metalMaterial);
+            guideRail.transform.rotation = Quaternion.Euler(0f, yaw, 0f);
+
+            var supportStart = new Vector3(FillingStarWheelCenterX, guidePosition.y, FillingLineZ);
+            var supportVector = guidePosition - supportStart;
+            var supportLength = supportVector.magnitude;
+            var supportArm = CreateCube(parent, "Star Wheel Exit Guide Support Arm", Vector3.Lerp(supportStart, guidePosition, 0.5f), new Vector3(0.055f, 0.055f, supportLength), metalMaterial);
+            supportArm.transform.rotation = Quaternion.Euler(0f, Mathf.Atan2(supportVector.x, supportVector.z) * Mathf.Rad2Deg, 0f);
         }
 
         private void CreateFixedStarWheelBarrier(Transform parent, Material material)
