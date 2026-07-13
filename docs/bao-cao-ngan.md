@@ -1,153 +1,95 @@
-# Báo cáo ngắn: Digital Twin quy trình Filling & Filtering
+# Báo cáo ngắn: Digital Model dây chuyền Filling & Filtering
+
+Tài liệu này là bản tóm tắt cho báo cáo môn học. Mô tả đầy đủ, thông số runtime và giới hạn kỹ thuật nằm trong [README](../README.md).
 
 ## 1. Mục tiêu
 
-Xây dựng mô hình digital twin cho dây chuyền chiết rót và kiểm tra chất lượng chai nước. Mô hình thể hiện bốn trạm chính: cấp chai, chiết rót, kiểm tra chất lượng và phân loại loại biên.
+Xây dựng mô hình Unity cho dây chuyền chai nước: cấp chai bằng mâm quay, dẫn chai qua neck support rail, chiết rót, đóng nắp, kiểm tra mức đầy, loại chai lỗi, tách hai lane và đóng carton sáu chai. Mô hình dùng để quan sát luồng vật liệu, thử tham số vận hành và giải thích mối liên hệ giữa mô hình vật lý gần đúng với logic điều khiển.
 
-## 2. Mức độ digital twin
+## 2. Cấp độ Digital Twin
 
-Mô hình đạt mức **Digital Shadow** vì dữ liệu vận hành được mô phỏng và cập nhật một chiều vào mô hình Unity:
+Project hiện là **Digital Model**. Toàn bộ trạng thái chai, tốc độ, mức bồn và kết quả QC được tạo trong Unity. Scene chưa kết nối PLC, sensor thật, IIoT hay CSV vào dây chuyền Filling & Filtering, nên không tuyên bố là Digital Shadow.
 
-- năng suất chai/giờ,
-- tốc độ mô-tơ cấp chai,
-- mức chất lỏng trong bồn,
-- thời gian rót,
-- trạng thái kiểm tra QC,
-- tổng chai đạt,
-- tổng chai lỗi.
+Các class telemetry/belt tổng quát trong project là hướng mở rộng. Để thành Digital Shadow, cần đưa dữ liệu thực vào mô hình, đồng bộ thời gian, ánh xạ tag thiết bị, hiệu chuẩn tham số và kiểm chứng độ sai lệch.
 
-## 3. Quy trình
-
-### Bottle Infeed Station
-
-Thiết bị: `Infeed Turntable`.
-
-Mâm quay mô phỏng việc cấp chai rỗng vào băng chuyền theo thứ tự. Dữ liệu theo dõi gồm throughput và tốc độ mô-tơ cấp liệu.
-
-Trong bản mô phỏng mới, turntable được nạp sẵn một lượng chai ban đầu để thể hiện trạng thái buffer đang có hàng. Khi buffer thiếu chai, chai mới được sinh ra từ phía trên mâm và rơi xuống turntable. Turntable đóng vai trò buffer/caching table: chai nằm trên mâm sẽ xoay quanh tâm mâm, khi số lượng chai trong buffer đạt ngưỡng thì hệ thống xả từng chai ra outlet để đi vào conveyor chính.
-
-Logic infeed có áp dụng mô phỏng vật lý gần đúng:
+## 3. Quy trình mô phỏng
 
 ```text
-omega = rpm * 2π / 60
-a_c = omega^2 * r
+Dropper -> Turntable -> Left Neck Rail + Blower -> Star Wheel
+        -> QC -> Reject hoặc A/B splitter -> Six-pack carton
 ```
 
-Trong đó `omega` là vận tốc góc của mâm quay, `r` là khoảng cách từ chai đến tâm mâm, và `a_c` là gia tốc ly tâm. Gia tốc này làm chai dạt dần ra barrier ngoài; khi chai đi tới sector outlet thì được truyền sang conveyor.
+- Chai rơi xuống mâm với điểm đáp lệch nhẹ theo chiều cấp chai.
+- Mâm quay giữ chai trong buffer. Chai dạt ra ngoài, va chạm với guide rail trái và chỉ vào rail khi còn chỗ trống.
+- Chai chuyển mượt sang rail, được blower đẩy dọc theo `+X`, rồi hạ dần xuống cao độ rail sau khi ra ngoài bán kính mâm.
+- Star wheel 10 pocket bắt chai sát cửa vào. Ba chai được rót đồng thời, sau đó nhận nắp và được siết bằng ba capping head trong star wheel.
+- QC phân loại theo thể tích. Chai lỗi bị pusher loại; chai đạt đi theo chuỗi lane `A,A,A,B,B,B` để tạo lưới `3 x 2` trong carton.
 
-### Filling Station
+## 4. Các mô hình vật lý và hiện tượng
 
-Thiết bị: cụm `Multiple Filling Nozzles`, `Liquid Vessel`, `Filling Stop Gate` và `Filling Star Wheel`.
-
-Turntable ở đầu line vẫn giữ vai trò buffer/caching table: chai rơi vào mâm, mâm xoay và xả từng chai qua outlet sang conveyor. Bottle đi thẳng trên slat chain conveyor trước khi vào Star Wheel. Khi tới vùng rót, bottle được bắt vào các pocket, đi theo cung tròn của Star Wheel, sau đó thoát ra theo tiếp tuyến để quay lại đường conveyor thẳng trước khi qua QC, reject và capping. Vì bottle đi cong trong Star Wheel nên 4 vòi rót cũng được bố trí theo cung pocket. Trong Unity, cụm này được dựng bằng `Scalloped Star Wheel Disc` và `Filling Arc Pocket 1..4`. Bánh sao không quay liên tục mà index từng nấc `stepAngle = 360 / starWheelPocketCount`; cung dịch chuyển giữa hai pocket lấy theo `pocketPitch = 2πR / starWheelPocketCount`. Với 14 pocket, mỗi nhịp quay khoảng 25,7 độ. Gate phía trước vùng filling chặn các chai chưa đến lượt. Khi đủ chai, conveyor dừng toàn bộ, Star Wheel khóa chai cố định tại slot và 4 vòi rót đồng thời trong thời gian `fillingTimeSeconds`. Nếu turntable đã đủ buffer trong lúc conveyor dừng, turntable cũng dừng để tránh tiếp tục cấp chai.
-
-Hệ thống mô phỏng:
-
-- 90% chai được rót đủ 100% dung tích,
-- 10% chai bị underfilled, chỉ đạt 50-60% dung tích.
-
-### QC Sensor Station
-
-Thiết bị: cảm biến quang/vision sensor ảo.
-
-Quy tắc kiểm tra:
+### Mâm quay
 
 ```text
-Volume >= 95% => PASSED
-Volume < 95%  => REJECTED
+ω = 2π · rpm / 60
+v = rω
+a_c = rω²
 ```
 
-### Sorting & Rejection Station
+`a_c` là gia tốc hướng tâm vật lý, hướng về tâm. Trong mô hình Unity, code dùng thành phần dạt ra ngoài trong hệ quy chiếu quay cùng lực bám bề mặt để tái hiện hiệu ứng chai bị cuốn theo mâm. Đây là xấp xỉ động học, không phải phép giải ma sát/tiếp xúc rigidbody.
 
-Thiết bị: `Pneumatic Pusher`, `Accept Chute`, `Reject Chute`.
+Chai dùng bán kính logic `0,11 m`; trên mâm và tại giao rail, các tâm chai được tách theo khoảng cách tối thiểu `2R`. Khi rail bị dồn, chai mới dừng ở guide thay vì xuyên qua hàng chai.
 
-Chai đạt đi thẳng xuống máng accept. Chai lỗi đến vị trí piston sẽ được pusher đẩy sang máng reject.
+### Rơi, rail và gió
 
-### Capping Station
+Chuyển động rơi là `lerp` theo thời gian với độ lệch điểm đáp `0,18 m`; không mô phỏng rơi tự do, lực cản hay quỹ đạo parabol.
 
-Thiết bị: `4 x Capping Head`, `Cap Feeder Bowl`, `Cap Feed Rail`.
+Trên rail, vận tốc được tăng dần tới vận tốc mục tiêu nhờ tham số gió. `neckRailGravityAccelerationMps2` là gia tốc cấp liệu hiệu dụng; nó không phải trực tiếp `g sin(θ)` vì rail runtime gần như ngang. Bốn air jet nghiêng xuống `15°` để biểu diễn hướng khí, không phải mô phỏng CFD.
 
-Chỉ chai đạt chuẩn mới đi tới trạm đóng nắp. Chai lỗi bị loại trước đó tại reject station. Cụm đóng nắp không nằm trong star-wheel nữa mà đặt sau QC/reject station: khi đủ 4 chai đạt chuẩn, conveyor dừng, 4 capping head cùng hạ xuống, nắp chai được bật hiển thị, chai chuyển trạng thái `CAPPED` rồi đi tiếp xuống accept chute. Các chai đang chờ được giữ khoảng cách tối thiểu trên slat chain để tránh va chạm khi line dừng/chạy lại.
-
-## 4. Công thức và logic
-
-Năng suất:
+Với khoảng cách phẳng từ tâm chai tới tâm mâm là `d`, cao độ chai được chuyển mượt:
 
 ```text
-Throughput = completedBottleCount / elapsedTimeHours
+u = clamp01((d - R_table) / 0,22)
+s = 3u² - 2u³
+y = (1 - s)y_table + sy_rail
 ```
 
-Mức đầy của chai:
+Vì vậy chai giữ cao độ mặt mâm đến `d = 0,95 m`, rồi hạ liên tục trong `0,22 m` tiếp theo.
+
+### Chiết rót và QC
+
+Ba vòi rót tạo batch ba chai. Xác suất rót đủ là `0,9`; chai lỗi nhận mức đầy ngẫu nhiên `0,5–0,6`. Thể tích bồn giảm theo tổng thể tích đã cấp:
 
 ```text
-liquidVolume01 = currentVolume / bottleCapacity
+LiquidLevel_next = LiquidLevel_now - Σ(Δvolume01 · bottleCapacityLiters)
 ```
 
-Mức chất lỏng bồn tổng:
+QC dùng ngưỡng:
 
 ```text
-LiquidLevel = LiquidLevel - filledVolume * bottleCapacityLiters
+liquidVolume01 >= 0,95  -> PASS
+liquidVolume01 <  0,95  -> REJECT
 ```
 
-Logic xác suất:
+## 5. Cấu hình chạy demo
 
-```text
-P(properly filled) = 0.9
-P(underfilled) = 0.1
-```
+| Hạng mục | Giá trị |
+| --- | ---: |
+| Turntable | `18 rpm`, bán kính `0,95 m` |
+| Buffer | 12 chai đầu, tối đa 16, ngưỡng xả 7 |
+| Conveyor | `0,85 m/s`, slip runtime 0 |
+| Star wheel | 10 pocket, `36°/pocket` |
+| Filling / capping | 3 vòi / 3 đầu |
+| Chuyển sang rail | `0,14 s` |
+| Hạ ngoài mâm | `0,22 m` |
 
-Logic filling nhiều vòi:
+## 6. Giới hạn và giá trị sử dụng
 
-```text
-assign bottle to filling slot
-star wheel indexes bottle into pocket
-when 4 bottles reached 4 nozzles:
-    stop conveyor
-    lock star wheel
-    close filling gate
-    snap bottles to fixed nozzle positions
-    fill all bottles in parallel
-    restart conveyor
-```
+Mô hình không tính lực khí nén, áp suất chất lỏng, biến dạng carton, tiếp xúc 3D hay CFD. Star wheel đặt chai theo slot logic; chai chưa được parent vào pocket cơ khí thật. Do đó, kết quả dùng để minh họa, kiểm tra logic và thảo luận thiết kế, không dùng làm giá trị hiệu chuẩn sản xuất.
 
-## 5. Thành phần Unity
+Giá trị học thuật của project là làm rõ cách kết hợp mô hình trạng thái, công thức cơ học cơ bản, trực quan 3D và chỉ số vận hành. Đây cũng là nền tảng để thêm telemetry, VVUQ và so sánh với dây chuyền thực trong bước tiếp theo.
 
-- `FillingFilteringDigitalTwin.cs`: điều phối logic dây chuyền.
-- `BottleProcessState.cs`: lưu thể tích, trạng thái và kết quả QC của từng chai.
-- `FillingFilteringHud.cs`: hiển thị dashboard.
-- `ConveyorDemoRuntimeBootstrap.cs`: tự dựng mô hình trực quan trong scene.
-- `ConveyorDemoSceneBuilder.cs`: menu editor để dựng lại scene.
+## 7. Tham khảo
 
-## 6. Logic turntable buffer
-
-```text
-prefill initial bottles on turntable
-if buffer has room:
-    spawn extra bottle from above
-    drop bottle into turntable
-omega = rpm * 2π / 60
-a_c = omega^2 * r
-bottle moves outward to rim barrier
-if bufferCount >= releaseThreshold and bottle reaches outlet sector:
-    release one bottle through outlet
-    transfer bottle to conveyor
-```
-
-Dữ liệu hiển thị thêm trên HUD:
-
-- số chai trong turntable buffer,
-- số chai đang ở conveyor/line xử lý.
-- vận tốc góc turntable,
-- gia tốc ly tâm tại rìa mâm.
-
-## 7. Conveyor
-
-Conveyor chính được đổi sang dạng **slat chain/modular conveyor**. Băng tải được thu hẹp theo kích thước chai và gồm nhiều tấm `Modular Slat Plate`, hai bên có guide rail để giữ chai chạy một hàng.
-
-Các tấm slat được chia khoảng theo `slatPitchM`, có khe `Slat Gap Shadow` và các gờ `Anti Slip Cross Rib`. Logic chuyển động dùng hệ số trượt nhỏ:
-
-```text
-effectiveSpeed = conveyorSpeed * (1 - conveyorSlipRatio)
-```
-
-Trong demo, `conveyorSlipRatio = 0.02`, giúp chai gần như bám theo slat chain và ít bị trượt bề mặt.
+1. [ISO 23247-2:2021 — Reference architecture for manufacturing digital twins](https://www.iso.org/cms/%20render/live/en/sites/isoorg/contents/data/standard/07/87/78743.html).
+2. [NIST — Digital Twins for Advanced Manufacturing](https://www.nist.gov/programs-projects/digital-twins-advanced-manufacturing).
+3. [OpenStax Physics — Angular velocity and centripetal acceleration](https://openstax.org/books/physics/pages/6-key-equations).
