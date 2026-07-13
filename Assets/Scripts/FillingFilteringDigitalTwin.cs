@@ -18,6 +18,13 @@ namespace ConveyorTwin
             B
         }
 
+        private enum PackGatePhase
+        {
+            Loading,
+            BlockingForPusher,
+            ResetHold
+        }
+
         [Header("Stations")]
         public Transform infeedTurntable;
         public Transform bottleSpawnPoint;
@@ -132,10 +139,13 @@ namespace ConveyorTwin
         public float packGateSensorZ = 6.57f;
         public float packGateOpenY = 0.38f;
         public float packGateClosedY = 0.82f;
+        public float packGateMoveSeconds = 0.12f;
+        public float packGateResetHoldSeconds = 0.15f;
         public float packPusherSeconds = 0.52f;
+        public float packPusherReturnSeconds = 0.42f;
         public float packCartonExitSeconds = 0.55f;
-        public Vector3 packCartonLoadPosition = new Vector3(1.41f, 0.58f, 6.6645f);
-        public Vector3 packCartonExitPosition = new Vector3(2.56f, 0.58f, 6.6645f);
+        public Vector3 packCartonLoadPosition = new Vector3(1.56f, 0.58f, 6.6645f);
+        public Vector3 packCartonExitPosition = new Vector3(2.71f, 0.58f, 6.6645f);
 
         [Header("Neck rail gravity feed")]
         public float neckRailStartX = 2.5f;
@@ -202,6 +212,7 @@ namespace ConveyorTwin
         public bool PackGateAClosed => IsPackGateClosed(SplitLane.A);
         public bool PackGateBClosed => IsPackGateClosed(SplitLane.B);
         public bool PackPusherActive => packLoadingOut;
+        public string PackGateState => DeterminePackGateState();
         public bool SplitterSafetyInterlocked { get; private set; }
         public bool SplitConveyorPaused => splitterPaused;
         public string SplitGuideState => splitGuideLane == SplitLane.A ? "A / parallel" : "B / diagonal";
@@ -244,6 +255,7 @@ namespace ConveyorTwin
         private bool splitGuideMoving;
         private bool splitterPaused;
         private bool packLoadingOut;
+        private PackGatePhase packGatePhase = PackGatePhase.Loading;
         private bool initializedTurntable;
         private int starWheelIndex;
         private int capMagazineVisibleCount;
@@ -778,7 +790,7 @@ namespace ConveyorTwin
                         // establish their 3 x 2 grid.
                         candidateZ = Mathf.Min(candidateZ, packFrontRowZ);
                     }
-                    else if (IsPackGateClosed(assignedLane))
+                    else if (packLoadingOut || IsPackGateClosed(assignedLane))
                     {
                         candidateZ = Mathf.Min(candidateZ, PackGateHoldZ);
                     }
@@ -2640,7 +2652,17 @@ namespace ConveyorTwin
 
         private bool IsPackGateClosed(SplitLane lane)
         {
-            return packLoadingOut || PackLaneBottles(lane).Count >= 3;
+            if (packGatePhase == PackGatePhase.BlockingForPusher)
+            {
+                return true;
+            }
+
+            if (packGatePhase == PackGatePhase.ResetHold)
+            {
+                return true;
+            }
+
+            return PackLaneBottles(lane).Count >= 3;
         }
 
         private void RegisterBottleInPack(BottleProcessState bottle, SplitLane lane)
@@ -2709,9 +2731,45 @@ namespace ConveyorTwin
                 return;
             }
 
+            if (gate == packStopGateA || gate == packStopGateB)
+            {
+                var blockedAngle = gate == packStopGateA ? -90f : 90f;
+                var targetRotation = Quaternion.Euler(0f, 0f, closed ? blockedAngle : 0f);
+                var turnSpeed = 90f / Mathf.Max(0.01f, packGateMoveSeconds);
+                gate.localRotation = Quaternion.RotateTowards(gate.localRotation, targetRotation, turnSpeed * Time.deltaTime);
+                return;
+            }
+
+            var targetY = closed ? packGateClosedY : packGateOpenY;
+            var travelSpeed = Mathf.Abs(packGateClosedY - packGateOpenY) / Mathf.Max(0.01f, packGateMoveSeconds);
             var position = gate.position;
-            position.y = closed ? packGateClosedY : packGateOpenY;
+            position.y = Mathf.MoveTowards(position.y, targetY, travelSpeed * Time.deltaTime);
             gate.position = position;
+        }
+
+        private string DeterminePackGateState()
+        {
+            if (packGatePhase == PackGatePhase.BlockingForPusher)
+            {
+                return "Blocking during push";
+            }
+
+            if (packGatePhase == PackGatePhase.ResetHold)
+            {
+                return "Reset hold";
+            }
+
+            return PackGateAClosed || PackGateBClosed ? "Blocking" : "Loading";
+        }
+
+        private IEnumerator WaitForPackGateTravel()
+        {
+            var elapsed = 0f;
+            while (elapsed < packGateMoveSeconds)
+            {
+                elapsed += Time.deltaTime;
+                yield return null;
+            }
         }
 
         private void PulsePackGateSensor(Transform sensor, float phaseOffset)
@@ -2735,7 +2793,7 @@ namespace ConveyorTwin
         private IEnumerator DischargeFullSixPack()
         {
             packLoadingOut = true;
-            UpdatePackStopGateVisuals();
+            packGatePhase = PackGatePhase.BlockingForPusher;
             var batch = new List<BottleProcessState>();
             batch.AddRange(packLaneABottles);
             batch.AddRange(packLaneBBottles);
@@ -2750,6 +2808,9 @@ namespace ConveyorTwin
                 lineBottles.Remove(bottle);
             }
 
+            // Ensure both swing-gates are fully across their lanes before the pusher stroke.
+            yield return WaitForPackGateTravel();
+
             var bottleStarts = new List<Vector3>();
             var bottleTargets = new List<Vector3>();
             for (var i = 0; i < batch.Count; i++)
@@ -2761,7 +2822,7 @@ namespace ConveyorTwin
             }
 
             var pusherStart = packPusher != null ? packPusher.position : Vector3.zero;
-            var pusherEnd = pusherStart + Vector3.right * 1.45f;
+            var pusherEnd = pusherStart + Vector3.right * 1.60f;
             var elapsed = 0f;
             while (elapsed < packPusherSeconds)
             {
@@ -2800,6 +2861,19 @@ namespace ConveyorTwin
                 yield return null;
             }
 
+            elapsed = 0f;
+            while (elapsed < packPusherReturnSeconds)
+            {
+                elapsed += Time.deltaTime;
+                var ratio = Mathf.SmoothStep(0f, 1f, elapsed / Mathf.Max(0.01f, packPusherReturnSeconds));
+                if (packPusher != null)
+                {
+                    packPusher.position = Vector3.Lerp(pusherEnd, pusherStart, ratio);
+                }
+
+                yield return null;
+            }
+
             foreach (var bottle in batch)
             {
                 if (bottle == null)
@@ -2827,8 +2901,14 @@ namespace ConveyorTwin
             packLaneABottles.Clear();
             packLaneBBottles.Clear();
             CartonsFilled++;
+
+            // Hold the swing-gates closed briefly after the piston has returned.
+            packGatePhase = PackGatePhase.ResetHold;
+            yield return new WaitForSeconds(Mathf.Max(0f, packGateResetHoldSeconds));
+
+            packGatePhase = PackGatePhase.Loading;
+            yield return WaitForPackGateTravel();
             packLoadingOut = false;
-            UpdatePackStopGateVisuals();
         }
 
         private IEnumerator MoveCappingHeads(List<Transform> activeHeads, Vector3[] from, Vector3[] to, float duration)

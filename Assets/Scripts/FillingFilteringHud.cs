@@ -60,7 +60,8 @@ namespace ConveyorTwin
             var gateAState = process.PackGateAClosed ? "CLOSED" : "OPEN";
             var gateBState = process.PackGateBClosed ? "CLOSED" : "OPEN";
             var pusherState = process.PackPusherActive ? "ACTIVE" : "READY";
-            DrawLine($"   Pack gate sensors: A {process.PackGateSensorCountA} | B {process.PackGateSensorCountB} | Gates: A {gateAState}, B {gateBState}");
+            DrawLine($"   Pack gate sensors: A {process.PackGateSensorCountA} | B {process.PackGateSensorCountB} | {process.PackGateState}");
+            DrawLine($"   Gates: A {gateAState}, B {gateBState}");
             DrawLine($"   Six-pack pusher: {pusherState}");
             DrawLine($"5. Total passed: {process.TotalPassed}");
             DrawLine($"   Total rejected: {process.TotalRejected}");

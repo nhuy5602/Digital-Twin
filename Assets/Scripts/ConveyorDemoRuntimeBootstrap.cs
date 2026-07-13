@@ -21,7 +21,7 @@ namespace ConveyorTwin
         private const float PackRowPitch = 0.235f;
         private const float PackGateZ = PackFrontRowZ - PackRowPitch * 2f - 0.24f;
         private const float PackGateSensorZ = PackGateZ + 0.16f;
-        private static readonly Vector3 PackCartonCenter = new Vector3(1.41f, 0.58f, PackFrontRowZ - PackRowPitch);
+        private static readonly Vector3 PackCartonCenter = new Vector3(1.56f, 0.58f, PackFrontRowZ - PackRowPitch);
         private static readonly Vector3 ScallopedStarWheelDiscLocalPosition = new Vector3(0f, 1.485f, 0f);
         private static readonly Vector3 InfeedTurntableBottleCenter = new Vector3(-3.253f, 1.05f, FillingLineZ);
         private const int FillingStarWheelPocketCount = 10;
@@ -270,11 +270,11 @@ namespace ConveyorTwin
             CreateSlatConveyorLane(parent, "B", LaneBCenterX, SplitGuideZ, MainConveyorEndZ, beltMaterial, metalMaterial, slatMaterial, ribMaterial);
 
             const float pusherGapEndZ = 1.61f;
-            CreateGuideRailSegment(parent, "Left Narrow Guide Rail After Pusher Gap", -0.28f, pusherGapEndZ, MainConveyorEndZ, metalMaterial);
+            CreateGuideRailSegment(parent, "Left Narrow Guide Rail After Pusher Gap", -0.28f, pusherGapEndZ, PackGateZ, metalMaterial);
             CreateGuideRailSegment(parent, "Right Narrow Guide Rail Before Split", 0.28f, pusherGapEndZ, SplitGuideZ - 0.12f, metalMaterial);
-            CreateGuideRailSegment(parent, "Right Narrow Guide Rail After Split", 0.28f, SplitGuideExitZ, MainConveyorEndZ, metalMaterial);
-            CreateGuideRailSegment(parent, "B Right Narrow Guide Rail", LaneBCenterX + 0.28f, SplitGuideZ, MainConveyorEndZ, metalMaterial);
-            CreateGuideRailSegment(parent, "B Left Narrow Guide Rail After Split", LaneBCenterX - 0.28f, SplitGuideExitZ, MainConveyorEndZ, metalMaterial);
+            CreateGuideRailSegment(parent, "Right Narrow Guide Rail After Split", 0.28f, SplitGuideExitZ, PackGateZ, metalMaterial);
+            CreateGuideRailSegment(parent, "B Right Narrow Guide Rail", LaneBCenterX + 0.28f, SplitGuideZ, PackGateZ, metalMaterial);
+            CreateGuideRailSegment(parent, "B Left Narrow Guide Rail After Split", LaneBCenterX - 0.28f, SplitGuideExitZ, PackGateZ, metalMaterial);
 
             CreateHorizontalNeckSupportRail(parent, "Infeed Neck Support Rail", InfeedTurntableBottleCenter.x + 0.65f, StarWheelPocketPosition(0, FillingStarWheelBottleCenter.y).x, FillingStarWheelBottleCenter.z, 1.64f, 1.41f, metalMaterial, true, true);
             CreateAirBlower(parent, metalMaterial, sensorMaterial);
@@ -312,6 +312,17 @@ namespace ConveyorTwin
             var length = Mathf.Max(0.05f, endZ - startZ);
             var centerZ = (startZ + endZ) * 0.5f;
             CreateCube(parent, name, new Vector3(x, 0.74f, centerZ), new Vector3(0.035f, 0.1f, length), material);
+
+            var inset = Mathf.Min(0.14f, length * 0.25f);
+            CreateGuideRailBrace(parent, $"{name} Start Brace", x, startZ + inset, material);
+            CreateGuideRailBrace(parent, $"{name} End Brace", x, endZ - inset, material);
+        }
+
+        private void CreateGuideRailBrace(Transform parent, string name, float railX, float z, Material material)
+        {
+            const float supportTopY = 0.29f;
+            const float railBottomY = 0.70f;
+            CreateCube(parent, name, new Vector3(railX, (supportTopY + railBottomY) * 0.5f, z), new Vector3(0.045f, railBottomY - supportTopY, 0.045f), material);
         }
 
         private SlatChainConveyorAnimator CreateConveyorAnimator(Transform parent, string name, List<Transform> movingParts, Vector3 worldAxis, float speedMps, float minCoordinate, float maxCoordinate)
@@ -659,8 +670,6 @@ namespace ConveyorTwin
             var packCenterZ = PackCartonCenter.z;
             CreateCube(parent, "A Pack Zone Backstop", new Vector3(0f, 0.74f, PackFrontRowZ + 0.16f), new Vector3(0.52f, 0.12f, 0.05f), metalMaterial);
             CreateCube(parent, "B Pack Zone Backstop", new Vector3(LaneBCenterX, 0.74f, PackFrontRowZ + 0.16f), new Vector3(0.52f, 0.12f, 0.05f), metalMaterial);
-            CreateCube(parent, "A Pack Zone Side Guide", new Vector3(-0.31f, 0.74f, packCenterZ), new Vector3(0.035f, 0.10f, 0.90f), metalMaterial);
-            CreateCube(parent, "B Pack Zone Side Guide", new Vector3(LaneBCenterX + 0.31f, 0.74f, packCenterZ), new Vector3(0.035f, 0.10f, 0.90f), metalMaterial);
 
             var gateSensorA = CreateCube(parent, "A Pack Stop Gate Sensor Beam", new Vector3(0f, 0.94f, PackGateSensorZ), new Vector3(0.52f, 0.035f, 0.035f), sensorMaterial).transform;
             var gateSensorB = CreateCube(parent, "B Pack Stop Gate Sensor Beam", new Vector3(LaneBCenterX, 0.94f, PackGateSensorZ), new Vector3(0.52f, 0.035f, 0.035f), sensorMaterial).transform;
@@ -669,8 +678,18 @@ namespace ConveyorTwin
             CreateFloorSupportLeg(parent, "A Pack Stop Gate Sensor Support", new Vector3(-0.37f, 0.84f, PackGateSensorZ), metalMaterial);
             CreateFloorSupportLeg(parent, "B Pack Stop Gate Sensor Support", new Vector3(LaneBCenterX + 0.37f, 0.84f, PackGateSensorZ), metalMaterial);
 
-            var stopGateA = CreateCube(parent, "A Pack Stop Gate", new Vector3(0f, 0.38f, PackGateZ), new Vector3(0.54f, 0.08f, 0.055f), metalMaterial).transform;
-            var stopGateB = CreateCube(parent, "B Pack Stop Gate", new Vector3(LaneBCenterX, 0.38f, PackGateZ), new Vector3(0.54f, 0.08f, 0.055f), metalMaterial).transform;
+            var stopGateAObject = new GameObject("A Pack Stop Gate");
+            stopGateAObject.transform.SetParent(parent);
+            stopGateAObject.transform.position = new Vector3(-0.28f, 0.82f, PackGateZ);
+            var stopGateA = stopGateAObject.transform;
+            var stopGateAArm = CreateCube(stopGateA, "A Pack Stop Gate Arm", stopGateA.position + Vector3.up * 0.27f, new Vector3(0.055f, 0.54f, 0.055f), metalMaterial).transform;
+            stopGateAArm.localPosition = new Vector3(0f, 0.27f, 0f);
+            var stopGateBObject = new GameObject("B Pack Stop Gate");
+            stopGateBObject.transform.SetParent(parent);
+            stopGateBObject.transform.position = new Vector3(LaneBCenterX + 0.28f, 0.82f, PackGateZ);
+            var stopGateB = stopGateBObject.transform;
+            var stopGateBArm = CreateCube(stopGateB, "B Pack Stop Gate Arm", stopGateB.position + Vector3.up * 0.27f, new Vector3(0.055f, 0.54f, 0.055f), metalMaterial).transform;
+            stopGateBArm.localPosition = new Vector3(0f, 0.27f, 0f);
             CreateCube(parent, "A Pack Stop Gate Outer Actuator", new Vector3(-0.36f, 0.63f, PackGateZ), new Vector3(0.10f, 0.14f, 0.22f), metalMaterial);
             CreateCube(parent, "B Pack Stop Gate Outer Actuator", new Vector3(LaneBCenterX + 0.36f, 0.63f, PackGateZ), new Vector3(0.10f, 0.14f, 0.22f), metalMaterial);
 
@@ -690,7 +709,6 @@ namespace ConveyorTwin
             CreateCube(cartonRoot.transform, "Carton Bottom", center + new Vector3(0f, -0.23f, 0f), new Vector3(footprint.x, 0.06f, footprint.y), material);
             CreateCube(cartonRoot.transform, "Carton Front Wall", center + new Vector3(0f, 0f, -halfZ), new Vector3(footprint.x, 0.46f, 0.05f), material);
             CreateCube(cartonRoot.transform, "Carton Back Wall", center + new Vector3(0f, 0f, halfZ), new Vector3(footprint.x, 0.46f, 0.05f), material);
-            CreateCube(cartonRoot.transform, "Carton Left Wall", center + new Vector3(-halfX, 0f, 0f), new Vector3(0.05f, 0.46f, footprint.y), material);
             CreateCube(cartonRoot.transform, "Carton Right Wall", center + new Vector3(halfX, 0f, 0f), new Vector3(0.05f, 0.46f, footprint.y), material);
             return cartonRoot.transform;
         }
