@@ -841,13 +841,6 @@ namespace ConveyorTwin
             meshFilter.sharedMesh = CreateScallopedStarWheelMesh(FillingStarWheelPocketCount, FillingStarWheelOuterRadius, FillingStarWheelPocketNotchRadius, 0.08f, 18, FillingStarWheelEntryAngleDegrees);
             disc.AddComponent<MeshRenderer>().sharedMaterial = wheelMaterial;
 
-            CreateCube(
-                rotatingAssembly.transform,
-                "Scalloped Star Wheel Rotation Marker",
-                starWheelRoot.transform.position + ScallopedStarWheelDiscLocalPosition + new Vector3(0.45f, 0.055f, 0f),
-                new Vector3(0.18f, 0.035f, 0.04f),
-                pocketMaterial);
-
             var hub = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             hub.name = "Star Wheel Center Hub";
             hub.transform.SetParent(rotatingAssembly.transform);
@@ -1037,9 +1030,6 @@ namespace ConveyorTwin
 
                 var driveBlock = CreateCube(tightenerTool.transform, $"Rotary Cap Tightener Drive Block {pocketIndex}", Vector3.zero, new Vector3(0.28f, 0.13f, 0.28f), metalMaterial);
                 driveBlock.transform.localPosition = new Vector3(0f, -0.06f, 0f);
-                var rotationMarker = CreateCube(tightenerTool.transform, $"Rotary Cap Tightener Rotation Marker {pocketIndex}", Vector3.zero, new Vector3(0.06f, 0.035f, 0.12f), sensorMaterial);
-                rotationMarker.transform.localPosition = new Vector3(0.14f, 0.04f, 0f);
-
                 var tightenerHead = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
                 tightenerHead.name = $"Rotary Cap Tightener Head {pocketIndex}";
                 tightenerHead.transform.SetParent(tightenerTool.transform);

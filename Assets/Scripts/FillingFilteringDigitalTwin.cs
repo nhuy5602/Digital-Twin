@@ -143,6 +143,8 @@ namespace ConveyorTwin
         public float packGateResetHoldSeconds = 0.15f;
         public float packPusherSeconds = 0.52f;
         public float packPusherReturnSeconds = 0.42f;
+        public float packCartonWidthM = 0.96f;
+        public float packPusherCartonClearanceM = 0.037f;
         public float packCartonExitSeconds = 0.55f;
         public Vector3 packCartonLoadPosition = new Vector3(1.56f, 0.58f, 6.6645f);
         public Vector3 packCartonExitPosition = new Vector3(2.71f, 0.58f, 6.6645f);
@@ -2822,7 +2824,11 @@ namespace ConveyorTwin
             }
 
             var pusherStart = packPusher != null ? packPusher.position : Vector3.zero;
-            var pusherEnd = pusherStart + Vector3.right * 1.60f;
+            var pusherHalfWidth = packPusher != null ? packPusher.lossyScale.x * 0.5f : 0f;
+            var pusherEnd = new Vector3(
+                packCartonLoadPosition.x - packCartonWidthM * 0.5f - pusherHalfWidth - packPusherCartonClearanceM,
+                pusherStart.y,
+                pusherStart.z);
             var elapsed = 0f;
             while (elapsed < packPusherSeconds)
             {
