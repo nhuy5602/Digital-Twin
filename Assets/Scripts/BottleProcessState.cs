@@ -45,6 +45,7 @@ namespace ConveyorTwin
         public Renderer bottleRenderer;
         public Renderer liquidRenderer;
         public Renderer capRenderer;
+        [HideInInspector] public float liquidVerticalScale = 1f;
 
         private Color emptyColor = new Color(0.82f, 0.95f, 1f, 0.35f);
         private Color passedColor = new Color(0.35f, 1f, 0.55f, 0.45f);
@@ -75,11 +76,11 @@ namespace ConveyorTwin
             if (liquidVisual != null)
             {
                 var scale = liquidVisual.localScale;
-                scale.y = Mathf.Lerp(0.02f, 0.38f, liquidVolume01);
+                scale.y = Mathf.Lerp(0.02f, 0.38f, liquidVolume01) * liquidVerticalScale;
                 liquidVisual.localScale = scale;
 
                 var localPosition = liquidVisual.localPosition;
-                localPosition.y = Mathf.Lerp(-0.30f, -0.04f, liquidVolume01);
+                localPosition.y = Mathf.Lerp(-0.30f, -0.04f, liquidVolume01) * liquidVerticalScale;
                 liquidVisual.localPosition = localPosition;
             }
 

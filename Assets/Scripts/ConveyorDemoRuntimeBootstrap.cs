@@ -10,7 +10,8 @@ namespace ConveyorTwin
         private const float FillingStarWheelCenterX = 0.72f;
         private const float FillingLineZ = -0.903f;
         private static readonly Vector3 FillingStarWheelVisualCenter = new Vector3(FillingStarWheelCenterX, 0f, FillingLineZ);
-        private static readonly Vector3 FillingStarWheelBottleCenter = new Vector3(FillingStarWheelCenterX, 0.92f, FillingLineZ);
+        // Only X/Z are shared by the pocket helpers. Bottle Y is calculated from BottleVerticalLayout.
+        private static readonly Vector3 FillingStarWheelBottleCenter = new Vector3(FillingStarWheelCenterX, 0f, FillingLineZ);
         private const float MainConveyorStartZ = -2.431457f;
         private const float SplitSensorZ = 3.58f;
         private const float SplitGuideZ = 4.47733736f;
@@ -22,9 +23,7 @@ namespace ConveyorTwin
         private const float PackGateZ = PackFrontRowZ - PackRowPitch * 2f - 0.24f;
         private const float PackGateSensorZ = PackGateZ + 0.16f;
         private static readonly Vector3 PackCartonCenter = new Vector3(1.56f, 0.58f, PackFrontRowZ - PackRowPitch);
-        private static readonly Vector3 ScallopedStarWheelDiscLocalPosition = new Vector3(0f, 1.485f, 0f);
         private static readonly Vector3 InfeedTurntableBottleCenter = new Vector3(-3.253f, 1.05f, FillingLineZ);
-        private const float InfeedTurntableBottleSurfaceLiftM = 0.16f;
         private const int FillingStarWheelPocketCount = 10;
         private const float StarWheelStepAngleDegrees = 360f / FillingStarWheelPocketCount;
         private const float FillingStarWheelPocketNotchRadius = 0.075f;
@@ -52,7 +51,87 @@ namespace ConveyorTwin
         private const float CappingPitch = 0.42f;
         private const float InfeedRightRailExtendNegativeXM = 0.13f;
 
+        [Header("Flexible bottle height")]
+        [Tooltip("Vertical scale applied to the bottle. 0.85 makes the bottle 15% shorter while keeping its base on the supporting surface. Rebuild the demo after changing it.")]
+        [Range(0.80f, 1.00f)] public float bottleHeightScale = 0.85f;
         public bool rebuildOnEnable = true;
+
+        private struct BottleVerticalLayout
+        {
+            private const float ConveyorBottleBaseY = 0.50f;
+            private const float TurntableBottleBaseY = 0.79f;
+            private const float FullScaleBodyHalfHeight = 0.42f;
+            private const float FullScaleNeckCenterOffsetY = 0.48f;
+            private const float FullScaleNeckHalfHeight = 0.13f;
+            private const float FullScaleCapCenterOffsetY = 0.66f;
+            private const float FullScaleCapHalfHeight = 0.045f;
+            private const float FullScaleDiscY = 1.485f;
+            private const float FullScaleInfeedRailStartY = 1.64f;
+            private const float FullScaleInfeedRailEndY = 1.41f;
+            private const float FullScaleExitGuideY = 1.342f;
+            private const float HubSupportBottomY = 0.08f;
+            private const float FullScaleBottleSpawnY = 2.68f;
+            private const float FullScaleFillingVesselY = 2.45f + ConveyorDemoRuntimeBootstrap.FillingNozzleClusterLift;
+            private const float FullScaleFillingMainRailY = 1.45f + ConveyorDemoRuntimeBootstrap.FillingNozzleClusterLift;
+            private const float FullScaleFillingSpringY = 1.34f + ConveyorDemoRuntimeBootstrap.FillingNozzleClusterLift;
+            private const float FullScaleFillingNozzleY = 1.08f + ConveyorDemoRuntimeBootstrap.FillingNozzleClusterLift;
+            private const float FullScaleCapMagazineAssemblyY = 2.09599996f;
+            private const float FullScaleCapMagazineOutletY = 1.68f;
+            private const float FullScaleCapTightenerToolY = 1.86f;
+            private const float FullScaleCapTightenerMotorY = 1.88f;
+
+            public BottleVerticalLayout(float heightScale)
+            {
+                HeightScale = heightScale;
+            }
+
+            public float HeightScale { get; }
+            public float BodyHalfHeight => FullScaleBodyHalfHeight * HeightScale;
+            public float NeckCenterOffsetY => FullScaleNeckCenterOffsetY * HeightScale;
+            public float NeckHalfHeight => FullScaleNeckHalfHeight * HeightScale;
+            public float CapCenterOffsetY => FullScaleCapCenterOffsetY * HeightScale;
+            public float CapHalfHeight => FullScaleCapHalfHeight * HeightScale;
+            public float LiquidBottomOffsetY => -0.32f * HeightScale;
+            public float ConveyorBottleCenterY => ConveyorBottleBaseY + BodyHalfHeight;
+            public float TurntableBottleCenterY => TurntableBottleBaseY + BodyHalfHeight;
+            public float NeckTopY => ConveyorBottleCenterY + NeckCenterOffsetY + NeckHalfHeight;
+            public float BottleTopY => ConveyorBottleCenterY + CapCenterOffsetY + CapHalfHeight;
+            public float BottleHeightM => BottleTopY - ConveyorBottleBaseY;
+            public float StarWheelDiscY => ScaleFromConveyorSurface(FullScaleDiscY);
+            public float StarWheelHubSupportCenterY => (HubSupportBottomY + StarWheelDiscY) * 0.5f;
+            public float StarWheelHubSupportHalfHeight => (StarWheelDiscY - HubSupportBottomY) * 0.5f;
+            public float InfeedRailStartY => ScaleFromTurntableSurface(FullScaleInfeedRailStartY);
+            public float InfeedRailEndY => ScaleFromConveyorSurface(FullScaleInfeedRailEndY);
+            public float StarWheelExitGuideY => ScaleFromConveyorSurface(FullScaleExitGuideY);
+            public float TurntableRimY => TurntableBottleCenterY - 0.20f;
+            public float TurntableOutletY => TurntableBottleCenterY - 0.16f;
+            public float BottleSpawnY => TurntableBottleCenterY + (FullScaleBottleSpawnY - FullScaleTurntableBottleCenterY);
+            public float FillingToolYOffset => NeckTopY - FullScaleNeckTopY;
+            public float CappingToolYOffset => BottleTopY - FullScaleBottleTopY;
+            public float FillingVesselY => FullScaleFillingVesselY + FillingToolYOffset;
+            public float FillingMainRailY => FullScaleFillingMainRailY + FillingToolYOffset;
+            public float FillingSpringY => FullScaleFillingSpringY + FillingToolYOffset;
+            public float FillingNozzleY => FullScaleFillingNozzleY + FillingToolYOffset;
+            public float CapMagazineAssemblyY => FullScaleCapMagazineAssemblyY + CappingToolYOffset;
+            public float CapMagazineOutletY => FullScaleCapMagazineOutletY + CappingToolYOffset;
+            public float CapTightenerToolY => FullScaleCapTightenerToolY + CappingToolYOffset;
+            public float CapTightenerMotorY => FullScaleCapTightenerMotorY + CappingToolYOffset;
+            public float AirBlowerYOffset => InfeedRailStartY - FullScaleInfeedRailStartY;
+
+            private float ScaleFromConveyorSurface(float fullScaleY)
+            {
+                return ConveyorBottleBaseY + (fullScaleY - ConveyorBottleBaseY) * HeightScale;
+            }
+
+            private float ScaleFromTurntableSurface(float fullScaleY)
+            {
+                return TurntableBottleBaseY + (fullScaleY - TurntableBottleBaseY) * HeightScale;
+            }
+
+            private static float FullScaleTurntableBottleCenterY => TurntableBottleBaseY + FullScaleBodyHalfHeight;
+            private static float FullScaleNeckTopY => ConveyorBottleBaseY + FullScaleBodyHalfHeight + FullScaleNeckCenterOffsetY + FullScaleNeckHalfHeight;
+            private static float FullScaleBottleTopY => ConveyorBottleBaseY + FullScaleBodyHalfHeight + FullScaleCapCenterOffsetY + FullScaleCapHalfHeight;
+        }
 
         private void OnEnable()
         {
@@ -65,6 +144,7 @@ namespace ConveyorTwin
         [ContextMenu("Rebuild Filling & Filtering Demo")]
         public void BuildDemo()
         {
+            var bottleLayout = GetBottleVerticalLayout();
             ClearExistingDemo();
 
             var root = new GameObject(GeneratedRootName);
@@ -86,21 +166,21 @@ namespace ConveyorTwin
             var cartonMaterial = CreateMaterial(new Color(0.62f, 0.42f, 0.22f));
 
             CreateFloor(root.transform, floorMaterial);
-            var infeedNeckSupportRailLeft = CreateConveyor(root.transform, beltMaterial, metalMaterial, slatMaterial, ribMaterial, sensorMaterial);
-            var turntableParts = CreateTurntable(root.transform, metalMaterial);
+            var infeedNeckSupportRailLeft = CreateConveyor(root.transform, beltMaterial, metalMaterial, slatMaterial, ribMaterial, sensorMaterial, bottleLayout);
+            var turntableParts = CreateTurntable(root.transform, metalMaterial, bottleLayout);
             var turntable = turntableParts.turntable;
-            var bottleSpawnPoint = CreateBottleDropper(root.transform);
-            var turntableOutlet = CreateTurntableOutlet(root.transform);
-            var vesselParts = CreateLiquidVessel(root.transform, metalMaterial, waterMaterial);
-            var nozzleParts = CreateFillingNozzles(root.transform, metalMaterial, waterMaterial);
+            var bottleSpawnPoint = CreateBottleDropper(root.transform, bottleLayout);
+            var turntableOutlet = CreateTurntableOutlet(root.transform, bottleLayout);
+            var vesselParts = CreateLiquidVessel(root.transform, metalMaterial, waterMaterial, bottleLayout);
+            var nozzleParts = CreateFillingNozzles(root.transform, metalMaterial, waterMaterial, bottleLayout);
             Transform fillingStopGate = null;
             // CreateFillingStopGate(root.transform, metalMaterial, rejectMaterial);
-            var starWheel = CreateFillingStarWheel(root.transform, starWheelMaterial, metalMaterial, beltMaterial);
+            var starWheel = CreateFillingStarWheel(root.transform, starWheelMaterial, metalMaterial, beltMaterial, bottleLayout);
             var qcBeam = CreateQcSensor(root.transform, sensorMaterial, metalMaterial);
-            var cappingStation = CreateCappingStation(root.transform, metalMaterial, capMaterial, capTubeMaterial, sensorMaterial);
+            var cappingStation = CreateCappingStation(root.transform, metalMaterial, capMaterial, capTubeMaterial, sensorMaterial, bottleLayout);
             var pusher = CreatePusher(root.transform, metalMaterial, rejectMaterial);
             var packingStation = CreateSplitterAndPackingStation(root.transform, metalMaterial, sensorMaterial, cartonMaterial);
-            var bottleTemplate = CreateBottleTemplate(root.transform, bottleMaterial, waterMaterial, capMaterial, labelMaterial);
+            var bottleTemplate = CreateBottleTemplate(root.transform, bottleMaterial, waterMaterial, capMaterial, labelMaterial, bottleLayout);
 
             var processObject = new GameObject("Filling Filtering Process Controller");
             processObject.transform.SetParent(root.transform);
@@ -164,7 +244,8 @@ namespace ConveyorTwin
             process.packCartonLoadPosition = PackCartonCenter;
             process.packCartonExitPosition = PackCartonCenter + new Vector3(1.15f, 0f, 0f);
             process.starWheelPocketCount = FillingStarWheelPocketCount;
-            process.starWheelCenter = FillingStarWheelBottleCenter;
+            var starWheelBottleCenter = new Vector3(FillingStarWheelCenterX, bottleLayout.ConveyorBottleCenterY, FillingLineZ);
+            process.starWheelCenter = starWheelBottleCenter;
             process.starWheelPocketRadius = FillingStarWheelBottleRadius;
             process.starWheelEntryAngleDegrees = FillingStarWheelEntryAngleDegrees;
             process.fillingStationStartPocketIndex = FillingStationStartPocketIndex;
@@ -177,8 +258,8 @@ namespace ConveyorTwin
             process.fillingTimeSeconds = 1.35f;
             process.properFillProbability = 0.9f;
             process.passThreshold = 0.95f;
-            // Lift the simulated bottle centre so its base rests on, rather than intersects, the table surface.
-            process.turntableCenter = InfeedTurntableBottleCenter + Vector3.up * InfeedTurntableBottleSurfaceLiftM;
+            // Keep each bottle base on its supporting surface while the bottle height changes.
+            process.turntableCenter = new Vector3(InfeedTurntableBottleCenter.x, bottleLayout.TurntableBottleCenterY, InfeedTurntableBottleCenter.z);
             process.turntableRadius = 0.95f;
             process.turntableBottleRadius = 0.11f;
             process.releaseThreshold = 7;
@@ -187,12 +268,12 @@ namespace ConveyorTwin
             process.spawnIntervalSeconds = 0.85f;
             process.releaseIntervalSeconds = 0.62f;
             process.neckRailStartX = InfeedTurntableBottleCenter.x + 0.65f;
-            process.neckRailEndX = StarWheelPocketPosition(0, FillingStarWheelBottleCenter.y).x;
-            process.neckRailZ = FillingStarWheelBottleCenter.z;
+            process.neckRailEndX = StarWheelPocketPosition(0, starWheelBottleCenter.y).x;
+            process.neckRailZ = starWheelBottleCenter.z;
             process.neckRailStartZ = process.neckRailZ;
             process.neckRailEndZ = process.neckRailZ;
-            process.neckRailStartBottleY = FillingStarWheelBottleCenter.y;
-            process.neckRailEndBottleY = FillingStarWheelBottleCenter.y;
+            process.neckRailStartBottleY = starWheelBottleCenter.y;
+            process.neckRailEndBottleY = starWheelBottleCenter.y;
             process.airBlowerWindSpeedMps = 0.8f;
 
             foreach (var conveyorAnimator in root.GetComponentsInChildren<SlatChainConveyorAnimator>())
@@ -202,6 +283,19 @@ namespace ConveyorTwin
 
             CreateHud(root.transform, process);
             ConfigureCameraAndLight();
+        }
+
+        private BottleVerticalLayout GetBottleVerticalLayout()
+        {
+            var heightScale = Mathf.Max(0.1f, bottleHeightScale);
+            if (heightScale < 0.80f || heightScale > 1.00f)
+            {
+                Debug.LogWarning(
+                    $"Bottle height scale {heightScale:0.00} is outside the verified 0.80-1.00 range. Recheck the rail-to-wheel handoff, filling nozzle clearance, and capping clearance.",
+                    this);
+            }
+
+            return new BottleVerticalLayout(heightScale);
         }
 
         private void ClearExistingDemo()
@@ -277,7 +371,7 @@ namespace ConveyorTwin
             floor.GetComponent<Renderer>().sharedMaterial = material;
         }
 
-        private Collider CreateConveyor(Transform parent, Material beltMaterial, Material metalMaterial, Material slatMaterial, Material ribMaterial, Material sensorMaterial)
+        private Collider CreateConveyor(Transform parent, Material beltMaterial, Material metalMaterial, Material slatMaterial, Material ribMaterial, Material sensorMaterial, BottleVerticalLayout bottleLayout)
         {
             CreateSlatConveyorLane(parent, "A", 0f, MainConveyorStartZ, MainConveyorEndZ, beltMaterial, metalMaterial, slatMaterial, ribMaterial);
             CreateSlatConveyorLane(parent, "B", LaneBCenterX, SplitGuideZ, MainConveyorEndZ, beltMaterial, metalMaterial, slatMaterial, ribMaterial);
@@ -289,8 +383,8 @@ namespace ConveyorTwin
             CreateGuideRailSegment(parent, "B Right Narrow Guide Rail", LaneBCenterX + 0.28f, SplitGuideZ, PackGateZ, metalMaterial);
             CreateGuideRailSegment(parent, "B Left Narrow Guide Rail After Split", LaneBCenterX - 0.28f, SplitGuideExitZ, PackGateZ, metalMaterial);
 
-            var infeedNeckSupportRailLeft = CreateHorizontalNeckSupportRail(parent, "Infeed Neck Support Rail", InfeedTurntableBottleCenter.x + 0.65f, StarWheelPocketPosition(0, FillingStarWheelBottleCenter.y).x, FillingStarWheelBottleCenter.z, 1.64f, 1.41f, metalMaterial, true, true);
-            CreateAirBlower(parent, metalMaterial, sensorMaterial);
+            var infeedNeckSupportRailLeft = CreateHorizontalNeckSupportRail(parent, "Infeed Neck Support Rail", InfeedTurntableBottleCenter.x + 0.65f, StarWheelPocketPosition(0, bottleLayout.ConveyorBottleCenterY).x, FillingStarWheelBottleCenter.z, bottleLayout.InfeedRailStartY, bottleLayout.InfeedRailEndY, metalMaterial, true, false);
+            CreateAirBlower(parent, metalMaterial, sensorMaterial, bottleLayout);
             // Outfeed neck support rail is disabled while the star wheel exit rail is being redesigned.
             return infeedNeckSupportRailLeft;
         }
@@ -352,9 +446,12 @@ namespace ConveyorTwin
             return animator;
         }
 
-        private Collider CreateHorizontalNeckSupportRail(Transform parent, string namePrefix, float startX, float endX, float z, float startY, float endY, Material material, bool shortenRightRail = false, bool createSupports = true)
+        private Collider CreateHorizontalNeckSupportRail(Transform parent, string namePrefix, float startX, float endX, float z, float startY, float endY, Material material, bool shortenRightRail = false, bool createVerticalSupports = true)
         {
-            const float railHalfGap = 0.105f;
+            // Keep the left rail fixed because it supplies the infeed-capture collider. Move only the
+            // right rail inward: 0.160 m center spacing leaves a 0.134 m opening for the 0.130 m neck.
+            const float leftRailZOffset = 0.105f;
+            const float rightRailZOffset = 0.055f;
             const float railWidth = 0.026f;
             const float railHeight = 0.035f;
             const float shortRightStartOffset = 0.42f;
@@ -372,7 +469,7 @@ namespace ConveyorTwin
             }
 
             // The rails exchange sides, but retain their original individual lengths.
-            var leftRail = CreateCube(parent, $"{namePrefix} Left", new Vector3(centerX, centerY, z + railHalfGap), new Vector3(railWidth, railHeight, length), material);
+            var leftRail = CreateCube(parent, $"{namePrefix} Left", new Vector3(centerX, centerY, z + leftRailZOffset), new Vector3(railWidth, railHeight, length), material);
             leftRail.transform.rotation = Quaternion.Euler(0f, 90f, pitchDegrees);
 
             var rightStartX = shortenRightRail
@@ -385,16 +482,16 @@ namespace ConveyorTwin
             var rightLength = Mathf.Sqrt(rightHorizontalLength * rightHorizontalLength + rightRise * rightRise);
             var rightCenterX = (rightStartX + endX) * 0.5f;
             var rightRailVerticalOffset = centerY - (rightStartY + endY) * 0.5f;
-            var rightRail = CreateCube(parent, $"{namePrefix} Right", new Vector3(rightCenterX, centerY, z - railHalfGap), new Vector3(railWidth, railHeight, rightLength), material);
+            var rightRail = CreateCube(parent, $"{namePrefix} Right", new Vector3(rightCenterX, centerY, z - rightRailZOffset), new Vector3(railWidth, railHeight, rightLength), material);
             rightRail.transform.rotation = Quaternion.Euler(0f, 90f, pitchDegrees);
-
-            if (!createSupports)
-            {
-                return leftRail.GetComponent<Collider>();
-            }
 
             var basePlate = CreateCube(parent, $"{namePrefix} Base", new Vector3(centerX, 0.42f, z), new Vector3(0.56f, 0.10f, horizontalLength + 0.22f), material);
             basePlate.transform.rotation = Quaternion.Euler(0f, 90f, 0f);
+
+            if (!createVerticalSupports)
+            {
+                return leftRail.GetComponent<Collider>();
+            }
 
             const float postSpacing = 0.8f;
             var postCount = Mathf.Max(2, Mathf.CeilToInt(horizontalLength / postSpacing) + 1);
@@ -408,7 +505,7 @@ namespace ConveyorTwin
                 var isEndPost = i == 0 || i == postCount - 1;
                 if (!isEndPost)
                 {
-                    CreateCube(parent, $"{namePrefix} Left Support", new Vector3(x, postCenterY, z + railHalfGap), new Vector3(0.035f, postHeight, 0.035f), material);
+                    CreateCube(parent, $"{namePrefix} Left Support", new Vector3(x, postCenterY, z + leftRailZOffset), new Vector3(0.035f, postHeight, 0.035f), material);
                 }
 
                 if (i != postCount - 1 && (!shortenRightRail || ratio >= rightStartRatio))
@@ -416,7 +513,7 @@ namespace ConveyorTwin
                     var rightSupportTopY = railY + rightRailVerticalOffset - railHeight * 0.5f + rightSupportRailOverlap;
                     var rightSupportCenterY = (0.48f + rightSupportTopY) * 0.5f;
                     var rightSupportHeight = Mathf.Max(0.1f, rightSupportTopY - 0.48f);
-                    CreateCube(parent, $"{namePrefix} Right Support", new Vector3(x, rightSupportCenterY, z - railHalfGap), new Vector3(0.035f, rightSupportHeight, 0.035f), material);
+                    CreateCube(parent, $"{namePrefix} Right Support", new Vector3(x, rightSupportCenterY, z - rightRailZOffset), new Vector3(0.035f, rightSupportHeight, 0.035f), material);
                 }
             }
 
@@ -475,9 +572,9 @@ namespace ConveyorTwin
             }
         }
 
-        private void CreateAirBlower(Transform parent, Material metalMaterial, Material airMaterial)
+        private void CreateAirBlower(Transform parent, Material metalMaterial, Material airMaterial, BottleVerticalLayout bottleLayout)
         {
-            var nozzlePosition = new Vector3(-2.51699996f, 1.99999995f, -0.89200002f);
+            var nozzlePosition = new Vector3(-2.51699996f, 1.99999995f + bottleLayout.AirBlowerYOffset, -0.89200002f);
             const float armLengthM = 0.48f;
             const float armThicknessM = 0.06f;
             var armPosition = nozzlePosition + new Vector3(0f, -armThicknessM * 0.5f, armLengthM * 0.5f);
@@ -508,12 +605,12 @@ namespace ConveyorTwin
             }
         }
 
-        private (Transform turntable, Transform outletGate) CreateTurntable(Transform parent, Material material)
+        private (Transform turntable, Transform outletGate) CreateTurntable(Transform parent, Material material, BottleVerticalLayout bottleLayout)
         {
-            return CreateTurntableVisual(parent, material, InfeedTurntableBottleCenter, "Infeed", false);
+            return CreateTurntableVisual(parent, material, InfeedTurntableBottleCenter, "Infeed", false, bottleLayout.TurntableRimY);
         }
 
-        private (Transform turntable, Transform outletGate) CreateTurntableVisual(Transform parent, Material material, Vector3 bottleCenter, string namePrefix, bool createOutletGate = true)
+        private (Transform turntable, Transform outletGate) CreateTurntableVisual(Transform parent, Material material, Vector3 bottleCenter, string namePrefix, bool createOutletGate, float rimY)
         {
             var table = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             table.name = $"{namePrefix} Turntable";
@@ -538,7 +635,7 @@ namespace ConveyorTwin
                 var angleRad = angleDegrees * Mathf.Deg2Rad;
                 var position = new Vector3(
                     bottleCenter.x + Mathf.Cos(angleRad) * rimRadius,
-                    bottleCenter.y - 0.04f,
+                    rimY,
                     bottleCenter.z + Mathf.Sin(angleRad) * rimRadius);
                 var rim = CreateCube(parent, $"{namePrefix} Turntable Safety Rim", position, new Vector3(segmentWidth, 0.34f, 0.04f), material);
                 rim.transform.rotation = Quaternion.Euler(0f, -angleDegrees + 90f, 0f);
@@ -547,34 +644,34 @@ namespace ConveyorTwin
             Transform outletGate = null;
             if (createOutletGate)
             {
-                outletGate = CreateCube(parent, $"{namePrefix} Turntable Outlet Gate", new Vector3(bottleCenter.x + 1.18f, bottleCenter.y - 0.04f, bottleCenter.z), new Vector3(0.08f, 0.26f, 0.55f), material).transform;
+                outletGate = CreateCube(parent, $"{namePrefix} Turntable Outlet Gate", new Vector3(bottleCenter.x + 1.18f, rimY, bottleCenter.z), new Vector3(0.08f, 0.26f, 0.55f), material).transform;
             }
 
             return (table.transform, outletGate);
         }
 
-        private Transform CreateBottleDropper(Transform parent)
+        private Transform CreateBottleDropper(Transform parent, BottleVerticalLayout bottleLayout)
         {
             var spawn = new GameObject("Bottle Spawn Point");
             spawn.transform.SetParent(parent);
-            spawn.transform.position = new Vector3(InfeedTurntableBottleCenter.x, 2.68f, InfeedTurntableBottleCenter.z);
+            spawn.transform.position = new Vector3(InfeedTurntableBottleCenter.x, bottleLayout.BottleSpawnY, InfeedTurntableBottleCenter.z);
             return spawn.transform;
         }
 
-        private Transform CreateTurntableOutlet(Transform parent)
+        private Transform CreateTurntableOutlet(Transform parent, BottleVerticalLayout bottleLayout)
         {
             var outlet = new GameObject("Turntable Outlet");
             outlet.transform.SetParent(parent);
-            outlet.transform.position = new Vector3(InfeedTurntableBottleCenter.x + 0.95f, InfeedTurntableBottleCenter.y, InfeedTurntableBottleCenter.z);
+            outlet.transform.position = new Vector3(InfeedTurntableBottleCenter.x + 0.95f, bottleLayout.TurntableOutletY, InfeedTurntableBottleCenter.z);
             return outlet.transform;
         }
 
-        private (Transform vessel, Transform liquid) CreateLiquidVessel(Transform parent, Material metalMaterial, Material waterMaterial)
+        private (Transform vessel, Transform liquid) CreateLiquidVessel(Transform parent, Material metalMaterial, Material waterMaterial, BottleVerticalLayout bottleLayout)
         {
             var vessel = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             vessel.name = "Liquid Vessel";
             vessel.transform.SetParent(parent);
-            vessel.transform.position = new Vector3(FillingStarWheelCenterX + 0.33f, 2.45f + FillingNozzleClusterLift, -0.72f);
+            vessel.transform.position = new Vector3(FillingStarWheelCenterX + 0.33f, bottleLayout.FillingVesselY, -0.72f);
             vessel.transform.localScale = new Vector3(0.55f, 0.95f, 0.55f);
             vessel.GetComponent<Renderer>().sharedMaterial = metalMaterial;
 
@@ -622,7 +719,7 @@ namespace ConveyorTwin
             return new Vector3(0f, y, CappingFirstZ + slotIndex * CappingPitch);
         }
 
-        private (List<Transform> nozzles, List<Transform> springs) CreateFillingNozzles(Transform parent, Material metalMaterial, Material waterMaterial)
+        private (List<Transform> nozzles, List<Transform> springs) CreateFillingNozzles(Transform parent, Material metalMaterial, Material waterMaterial, BottleVerticalLayout bottleLayout)
         {
             var nozzles = new List<Transform>();
             var springs = new List<Transform>();
@@ -630,7 +727,7 @@ namespace ConveyorTwin
             CreateCube(
                 parent,
                 "Filling Nozzle Main Rail",
-                new Vector3(FillingStarWheelCenterX, 1.45f + FillingNozzleClusterLift, FillingLineZ),
+                new Vector3(FillingStarWheelCenterX, bottleLayout.FillingMainRailY, FillingLineZ),
                 new Vector3(mainRailDiameter, 0.12f, mainRailDiameter),
                 metalMaterial);
 
@@ -642,12 +739,12 @@ namespace ConveyorTwin
                 nozzleAssembly.transform.SetParent(parent);
                 nozzleAssembly.transform.position = Vector3.zero;
 
-                var spring = CreateCube(nozzleAssembly.transform, $"Nozzle Spring {i + 1}", new Vector3(stationPosition.x, 1.34f + FillingNozzleClusterLift, stationPosition.z), new Vector3(0.08f, 0.18f, 0.08f), metalMaterial);
+                var spring = CreateCube(nozzleAssembly.transform, $"Nozzle Spring {i + 1}", new Vector3(stationPosition.x, bottleLayout.FillingSpringY, stationPosition.z), new Vector3(0.08f, 0.18f, 0.08f), metalMaterial);
 
                 var nozzle = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
                 nozzle.name = $"Filling Nozzle {i + 1}";
                 nozzle.transform.SetParent(nozzleAssembly.transform);
-                nozzle.transform.position = new Vector3(stationPosition.x, 1.08f + FillingNozzleClusterLift, stationPosition.z);
+                nozzle.transform.position = new Vector3(stationPosition.x, bottleLayout.FillingNozzleY, stationPosition.z);
                 nozzle.transform.localScale = new Vector3(0.07f, FillingNozzleScaleY, 0.07f);
                 nozzle.GetComponent<Renderer>().sharedMaterial = metalMaterial;
 
@@ -752,39 +849,39 @@ namespace ConveyorTwin
             return cartonRoot.transform;
         }
 
-        private BottleProcessState CreateBottleTemplate(Transform parent, Material bottleMaterial, Material waterMaterial, Material capMaterial, Material labelMaterial)
+        private BottleProcessState CreateBottleTemplate(Transform parent, Material bottleMaterial, Material waterMaterial, Material capMaterial, Material labelMaterial, BottleVerticalLayout bottleLayout)
         {
             var bottleRoot = new GameObject("Bottle Template");
             bottleRoot.transform.SetParent(parent);
-            bottleRoot.transform.position = new Vector3(0f, 0.82f, -4.7f);
+            bottleRoot.transform.position = new Vector3(0f, bottleLayout.ConveyorBottleCenterY, -4.7f);
 
             var body = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             body.name = "Bottle Body";
             body.transform.SetParent(bottleRoot.transform);
             body.transform.localPosition = Vector3.zero;
-            body.transform.localScale = new Vector3(0.14f, 0.42f, 0.14f);
+            body.transform.localScale = new Vector3(0.14f, bottleLayout.BodyHalfHeight, 0.14f);
             body.GetComponent<Renderer>().sharedMaterial = bottleMaterial;
 
             var neck = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             neck.name = "Bottle Neck";
             neck.transform.SetParent(bottleRoot.transform);
-            neck.transform.localPosition = new Vector3(0f, 0.48f, 0f);
-            neck.transform.localScale = new Vector3(0.065f, 0.13f, 0.065f);
+            neck.transform.localPosition = new Vector3(0f, bottleLayout.NeckCenterOffsetY, 0f);
+            neck.transform.localScale = new Vector3(0.065f, bottleLayout.NeckHalfHeight, 0.065f);
             neck.GetComponent<Renderer>().sharedMaterial = bottleMaterial;
 
             var cap = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             cap.name = "Bottle Cap";
             cap.transform.SetParent(bottleRoot.transform);
-            cap.transform.localPosition = new Vector3(0f, 0.66f, 0f);
-            cap.transform.localScale = new Vector3(0.075f, 0.045f, 0.075f);
+            cap.transform.localPosition = new Vector3(0f, bottleLayout.CapCenterOffsetY, 0f);
+            cap.transform.localScale = new Vector3(0.075f, bottleLayout.CapHalfHeight, 0.075f);
             cap.GetComponent<Renderer>().sharedMaterial = capMaterial;
             cap.SetActive(false);
 
             var liquid = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             liquid.name = "Bottle Liquid";
             liquid.transform.SetParent(bottleRoot.transform);
-            liquid.transform.localPosition = new Vector3(0f, -0.32f, 0f);
-            liquid.transform.localScale = new Vector3(0.105f, 0.02f, 0.105f);
+            liquid.transform.localPosition = new Vector3(0f, bottleLayout.LiquidBottomOffsetY, 0f);
+            liquid.transform.localScale = new Vector3(0.105f, 0.02f * bottleLayout.HeightScale, 0.105f);
             liquid.GetComponent<Renderer>().sharedMaterial = waterMaterial;
 
             var state = bottleRoot.AddComponent<BottleProcessState>();
@@ -793,6 +890,7 @@ namespace ConveyorTwin
             state.liquidVisual = liquid.transform;
             state.capVisual = cap.transform;
             state.capRenderer = cap.GetComponent<Renderer>();
+            state.liquidVerticalScale = bottleLayout.HeightScale;
             state.SetVolume(0f);
             bottleRoot.SetActive(false);
             return state;
@@ -863,7 +961,7 @@ namespace ConveyorTwin
             return mesh;
         }
 
-        private Transform CreateFillingStarWheel(Transform parent, Material wheelMaterial, Material metalMaterial, Material pocketMaterial)
+        private Transform CreateFillingStarWheel(Transform parent, Material wheelMaterial, Material metalMaterial, Material pocketMaterial, BottleVerticalLayout bottleLayout)
         {
             var starWheelRoot = new GameObject("Filling Star Wheel");
             starWheelRoot.transform.SetParent(parent);
@@ -871,7 +969,7 @@ namespace ConveyorTwin
 
             var rotatingAssembly = new GameObject("Scalloped Star Wheel Rotating Assembly");
             rotatingAssembly.transform.SetParent(starWheelRoot.transform);
-            rotatingAssembly.transform.localPosition = ScallopedStarWheelDiscLocalPosition;
+            rotatingAssembly.transform.localPosition = new Vector3(0f, bottleLayout.StarWheelDiscY, 0f);
 
             var disc = new GameObject("Scalloped Star Wheel Disc");
             disc.transform.SetParent(rotatingAssembly.transform);
@@ -890,8 +988,8 @@ namespace ConveyorTwin
             var hubSupport = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             hubSupport.name = "Star Wheel Center Hub Support";
             hubSupport.transform.SetParent(starWheelRoot.transform);
-            hubSupport.transform.position = new Vector3(FillingStarWheelCenterX, 0.7825f, FillingLineZ);
-            hubSupport.transform.localScale = new Vector3(0.16f, 0.7025f, 0.16f);
+            hubSupport.transform.position = new Vector3(FillingStarWheelCenterX, bottleLayout.StarWheelHubSupportCenterY, FillingLineZ);
+            hubSupport.transform.localScale = new Vector3(0.16f, bottleLayout.StarWheelHubSupportHalfHeight, 0.16f);
             hubSupport.GetComponent<Renderer>().sharedMaterial = metalMaterial;
 
             var hubSupportFoot = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
@@ -901,21 +999,21 @@ namespace ConveyorTwin
             hubSupportFoot.transform.localScale = new Vector3(0.34f, 0.04f, 0.34f);
             hubSupportFoot.GetComponent<Renderer>().sharedMaterial = metalMaterial;
 
-            CreateFixedStarWheelBarrier(parent, metalMaterial);
+            CreateFixedStarWheelBarrier(parent, metalMaterial, bottleLayout);
 
-            CreateStarWheelOutfeedReleaseGuide(parent, metalMaterial);
+            CreateStarWheelOutfeedReleaseGuide(parent, metalMaterial, bottleLayout);
             CreateCube(parent, "Filling Star Wheel Base", new Vector3(FillingStarWheelCenterX, 0.31f, -0.68f), new Vector3(1.7617f, 0.16f, 1.7f), metalMaterial);
             return rotatingAssembly.transform;
         }
 
-        private void CreateStarWheelOutfeedReleaseGuide(Transform parent, Material metalMaterial)
+        private void CreateStarWheelOutfeedReleaseGuide(Transform parent, Material metalMaterial, BottleVerticalLayout bottleLayout)
         {
-            var exitPoint = StarWheelPocketPosition(FillingStarWheelPocketCount - 1, FillingStarWheelBottleCenter.y);
-            var conveyorPoint = new Vector3(0f, FillingStarWheelBottleCenter.y, exitPoint.z + 0.22f);
+            var exitPoint = StarWheelPocketPosition(FillingStarWheelPocketCount - 1, bottleLayout.ConveyorBottleCenterY);
+            var conveyorPoint = new Vector3(0f, bottleLayout.ConveyorBottleCenterY, exitPoint.z + 0.22f);
             var length = Vector3.Distance(exitPoint, conveyorPoint);
             var yaw = Mathf.Atan2(conveyorPoint.x - exitPoint.x, conveyorPoint.z - exitPoint.z) * Mathf.Rad2Deg;
 
-            var guidePosition = new Vector3(0.009f, 1.342f, -0.436f);
+            var guidePosition = new Vector3(0.009f, bottleLayout.StarWheelExitGuideY, -0.436f);
             var guideRail = CreateCube(parent, "Star Wheel Exit Guide Rail", guidePosition, new Vector3(0.035f, 0.08f, length + 0.2f), metalMaterial);
             guideRail.transform.rotation = Quaternion.Euler(0f, yaw, 0f);
 
@@ -926,11 +1024,11 @@ namespace ConveyorTwin
             supportArm.transform.rotation = Quaternion.Euler(0f, Mathf.Atan2(supportVector.x, supportVector.z) * Mathf.Rad2Deg, 0f);
         }
 
-        private void CreateFixedStarWheelBarrier(Transform parent, Material material)
+        private void CreateFixedStarWheelBarrier(Transform parent, Material material, BottleVerticalLayout bottleLayout)
         {
             const int starBarrierSegments = 96;
             const float starBarrierRadius = FillingStarWheelOuterRadius + 0.045f;
-            var starBarrierY = ScallopedStarWheelDiscLocalPosition.y;
+            var starBarrierY = bottleLayout.StarWheelDiscY;
             var startDegrees = StarWheelPocketAngleDegrees(0) + StarWheelStepAngleDegrees * 0.5f;
             var endDegrees = StarWheelPocketAngleDegrees(FillingStarWheelPocketCount - 1) - StarWheelStepAngleDegrees * 0.5f;
             if (endDegrees <= startDegrees)
@@ -1023,7 +1121,7 @@ namespace ConveyorTwin
             return mesh;
         }
 
-        private (List<Transform> heads, Transform dropper, Transform sensor, List<Transform> magazineCaps) CreateCappingStation(Transform parent, Material metalMaterial, Material capMaterial, Material capTubeMaterial, Material sensorMaterial)
+        private (List<Transform> heads, Transform dropper, Transform sensor, List<Transform> magazineCaps) CreateCappingStation(Transform parent, Material metalMaterial, Material capMaterial, Material capTubeMaterial, Material sensorMaterial, BottleVerticalLayout bottleLayout)
         {
             var heads = new List<Transform>();
             var magazineCaps = new List<Transform>();
@@ -1035,7 +1133,9 @@ namespace ConveyorTwin
 
             var capMagazineAssembly = new GameObject("Cap Magazine Assembly");
             capMagazineAssembly.transform.SetParent(parent);
-            capMagazineAssembly.transform.position = CapMagazineTubePosition;
+            var capMagazinePosition = CapMagazineTubePosition;
+            capMagazinePosition.y = bottleLayout.CapMagazineAssemblyY;
+            capMagazineAssembly.transform.position = capMagazinePosition;
             capMagazineAssembly.transform.rotation = Quaternion.Euler(CapMagazineTubeEulerAngles);
 
             var capTube = new GameObject("Transparent Cap Magazine Tube");
@@ -1048,7 +1148,7 @@ namespace ConveyorTwin
 
             var tubeOutlet = capMagazineAssembly.transform.TransformPoint(
                 CapMagazineAssemblyLocalOffset + CapMagazineLocalPosition(-CapMagazineGuideHalfLength));
-            var defaultOutletPosition = new Vector3(capDropPosition.x, 1.68f, capDropPosition.z)
+            var defaultOutletPosition = new Vector3(capDropPosition.x, bottleLayout.CapMagazineOutletY, capDropPosition.z)
                 + capMagazineAssembly.transform.TransformVector(CapMagazineAssemblyLocalOffset);
             var guideRailLength = Vector3.Distance(tubeOutlet, defaultOutletPosition);
             var outletCapLocalRotation = Quaternion.Euler(CapMagazineOutletCapLocalEulerAngles);
@@ -1081,12 +1181,12 @@ namespace ConveyorTwin
                 var stationPosition = StarWheelPocketPosition(pocketIndex, 0f);
                 var tightenerTool = new GameObject($"Rotary Cap Tightener Moving Tool {pocketIndex}");
                 tightenerTool.transform.SetParent(parent);
-                tightenerTool.transform.position = new Vector3(stationPosition.x, 1.86f, stationPosition.z);
+                tightenerTool.transform.position = new Vector3(stationPosition.x, bottleLayout.CapTightenerToolY, stationPosition.z);
 
                 var tightenerMotor = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
                 tightenerMotor.name = $"Rotary Cap Tightener Fixed Motor {pocketIndex}";
                 tightenerMotor.transform.SetParent(parent);
-                tightenerMotor.transform.position = new Vector3(stationPosition.x, 1.88f, stationPosition.z);
+                tightenerMotor.transform.position = new Vector3(stationPosition.x, bottleLayout.CapTightenerMotorY, stationPosition.z);
                 tightenerMotor.transform.localScale = new Vector3(0.16f, 0.28f, 0.16f);
                 tightenerMotor.GetComponent<Renderer>().sharedMaterial = metalMaterial;
 
