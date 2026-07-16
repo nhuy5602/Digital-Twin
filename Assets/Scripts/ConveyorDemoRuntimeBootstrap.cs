@@ -45,6 +45,9 @@ namespace ConveyorTwin
         private const float CapMagazineGuideHalfLength = 0.55f;
         private const float CapMagazineGuideCurveDepth = 0.025f;
         private const float FillingNozzleScaleY = 0.32f;
+        private const float FillingNozzleMainRailThicknessY = 0.25f;
+        private const float FillingNozzleRaiseY = 0.16549993f;
+        private const float RotaryCapTightenerMotorRaiseY = 0.03874981f;
         private const float FillingNozzleClusterLift = FillingNozzleScaleY * 2f;
         private const float FillingFirstZ = -1.2f;
         private const float CappingFirstZ = 1.65f;
@@ -634,7 +637,9 @@ namespace ConveyorTwin
             {
                 var lateralOffset = Vector3.forward * ((i - 1.5f) * jetSpacingM);
                 var jetCenter = nozzlePosition + lateralOffset + jetDirection * (jetLengthM * 0.5f + 0.04f);
-                var gust = CreateCube(parent, $"Infeed Air Jet {i + 1}", jetCenter, new Vector3(jetLengthM, 0.012f, 0.012f), airMaterial);
+                // Parent each visual jet to the nozzle so a nozzle translation also carries
+                // the complete air stream, not only the nozzle body.
+                var gust = CreateCube(blower.transform, $"Infeed Air Jet {i + 1}", jetCenter, new Vector3(jetLengthM, 0.012f, 0.012f), airMaterial);
                 gust.transform.rotation = Quaternion.Euler(0f, 0f, -15f);
             }
         }
@@ -762,7 +767,7 @@ namespace ConveyorTwin
                 parent,
                 "Filling Nozzle Main Rail",
                 new Vector3(FillingStarWheelCenterX, bottleLayout.FillingMainRailY, FillingLineZ),
-                new Vector3(mainRailDiameter, 0.12f, mainRailDiameter),
+                new Vector3(mainRailDiameter, FillingNozzleMainRailThicknessY, mainRailDiameter),
                 metalMaterial);
 
             const int nozzleCount = 3;
@@ -778,7 +783,7 @@ namespace ConveyorTwin
                 var nozzle = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
                 nozzle.name = $"Filling Nozzle {i + 1}";
                 nozzle.transform.SetParent(nozzleAssembly.transform);
-                nozzle.transform.position = new Vector3(stationPosition.x, bottleLayout.FillingNozzleY, stationPosition.z);
+                nozzle.transform.position = new Vector3(stationPosition.x, bottleLayout.FillingNozzleY + FillingNozzleRaiseY, stationPosition.z);
                 nozzle.transform.localScale = new Vector3(0.07f, FillingNozzleScaleY, 0.07f);
                 nozzle.GetComponent<Renderer>().sharedMaterial = metalMaterial;
 
@@ -1063,7 +1068,7 @@ namespace ConveyorTwin
             const int starBarrierSegments = 96;
             const float starBarrierRadius = FillingStarWheelOuterRadius + 0.045f;
             var starBarrierY = bottleLayout.StarWheelDiscY;
-            var startDegrees = StarWheelPocketAngleDegrees(0) + StarWheelStepAngleDegrees * 0.5f;
+            var startDegrees = StarWheelPocketAngleDegrees(0) + 5f;
             var endDegrees = StarWheelPocketAngleDegrees(FillingStarWheelPocketCount - 1) - StarWheelStepAngleDegrees * 0.5f;
             if (endDegrees <= startDegrees)
             {
@@ -1220,7 +1225,7 @@ namespace ConveyorTwin
                 var tightenerMotor = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
                 tightenerMotor.name = $"Rotary Cap Tightener Fixed Motor {pocketIndex}";
                 tightenerMotor.transform.SetParent(parent);
-                tightenerMotor.transform.position = new Vector3(stationPosition.x, bottleLayout.CapTightenerMotorY, stationPosition.z);
+                tightenerMotor.transform.position = new Vector3(stationPosition.x, bottleLayout.CapTightenerMotorY + RotaryCapTightenerMotorRaiseY, stationPosition.z);
                 tightenerMotor.transform.localScale = new Vector3(0.16f, 0.28f, 0.16f);
                 tightenerMotor.GetComponent<Renderer>().sharedMaterial = metalMaterial;
 
