@@ -50,6 +50,10 @@ namespace ConveyorTwin
         private const float CappingFirstZ = 1.65f;
         private const float CappingPitch = 0.42f;
         private const float InfeedRightRailExtendNegativeXM = 0.13f;
+        // The end nearest the star wheel has the greater X value and is the fixed reference point.
+        // Both values are world-space rail-centre heights.
+        private const float InfeedRailPositiveXEndY = 1.393f;
+        private const float InfeedRailNegativeXEndY = 1.53f;
 
         [Header("Flexible bottle height")]
         [Tooltip("Vertical scale applied to the bottle. 0.85 makes the bottle 15% shorter while keeping its base on the supporting surface. Rebuild the demo after changing it.")]
@@ -272,7 +276,11 @@ namespace ConveyorTwin
             process.neckRailZ = starWheelBottleCenter.z;
             process.neckRailStartZ = process.neckRailZ;
             process.neckRailEndZ = process.neckRailZ;
-            process.neckRailStartBottleY = starWheelBottleCenter.y;
+            // Keep the bottle centre a constant distance below the two neck rails.  This makes
+            // the bottle trajectory parallel to the rail slope while preserving the fixed
+            // positive-X handoff height at the star wheel.
+            var railToBottleCenterOffsetY = InfeedRailPositiveXEndY - starWheelBottleCenter.y;
+            process.neckRailStartBottleY = InfeedRailNegativeXEndY - railToBottleCenterOffsetY;
             process.neckRailEndBottleY = starWheelBottleCenter.y;
             process.airBlowerWindSpeedMps = 0.8f;
 
@@ -383,7 +391,17 @@ namespace ConveyorTwin
             CreateGuideRailSegment(parent, "B Right Narrow Guide Rail", LaneBCenterX + 0.28f, SplitGuideZ, PackGateZ, metalMaterial);
             CreateGuideRailSegment(parent, "B Left Narrow Guide Rail After Split", LaneBCenterX - 0.28f, SplitGuideExitZ, PackGateZ, metalMaterial);
 
-            var infeedNeckSupportRailLeft = CreateHorizontalNeckSupportRail(parent, "Infeed Neck Support Rail", InfeedTurntableBottleCenter.x + 0.65f, StarWheelPocketPosition(0, bottleLayout.ConveyorBottleCenterY).x, FillingStarWheelBottleCenter.z, bottleLayout.InfeedRailStartY, bottleLayout.InfeedRailEndY, metalMaterial, true, false);
+            var infeedNeckSupportRailLeft = CreateHorizontalNeckSupportRail(
+                parent,
+                "Infeed Neck Support Rail",
+                InfeedTurntableBottleCenter.x + 0.65f,
+                StarWheelPocketPosition(0, bottleLayout.ConveyorBottleCenterY).x,
+                FillingStarWheelBottleCenter.z,
+                InfeedRailNegativeXEndY,
+                InfeedRailPositiveXEndY,
+                metalMaterial,
+                true,
+                false);
             CreateAirBlower(parent, metalMaterial, sensorMaterial, bottleLayout);
             // Outfeed neck support rail is disabled while the star wheel exit rail is being redesigned.
             return infeedNeckSupportRailLeft;
@@ -446,46 +464,51 @@ namespace ConveyorTwin
             return animator;
         }
 
-        private Collider CreateHorizontalNeckSupportRail(Transform parent, string namePrefix, float startX, float endX, float z, float startY, float endY, Material material, bool shortenRightRail = false, bool createVerticalSupports = true)
+        private Collider CreateHorizontalNeckSupportRail(Transform parent, string namePrefix, float negativeEndX, float positiveEndX, float z, float negativeEndY, float positiveEndY, Material material, bool shortenRightRail = false, bool createVerticalSupports = true)
         {
-            // Keep the left rail fixed because it supplies the infeed-capture collider. Move only the
-            // right rail inward: 0.160 m center spacing leaves a 0.134 m opening for the 0.130 m neck.
-            const float leftRailZOffset = 0.105f;
+            // The left rail remains the infeed-capture collider, but is offset toward the neck to create
+            // the requested visibly clamped guide at Z = -0.852 m on the filling line.
+            const float leftRailZOffset = 0.051f;
             const float rightRailZOffset = 0.055f;
             const float railWidth = 0.026f;
             const float railHeight = 0.035f;
             const float shortRightStartOffset = 0.42f;
             const float rightSupportRailOverlap = 0.003f;
-            var horizontalLength = Mathf.Abs(startX - endX);
-            var rise = endY - startY;
+            var horizontalLength = Mathf.Abs(positiveEndX - negativeEndX);
+            var rise = positiveEndY - negativeEndY;
             var length = Mathf.Sqrt(horizontalLength * horizontalLength + rise * rise);
-            var centerX = (startX + endX) * 0.5f;
-            var centerY = (startY + endY) * 0.5f;
-            var pitchDegrees = Mathf.Atan2(rise, horizontalLength) * Mathf.Rad2Deg;
-            var railDirection = Mathf.Sign(endX - startX);
+            var centerX = (negativeEndX + positiveEndX) * 0.5f;
+            var centerY = (negativeEndY + positiveEndY) * 0.5f;
+            var railDirection = Mathf.Sign(positiveEndX - negativeEndX);
             if (Mathf.Approximately(railDirection, 0f))
             {
                 railDirection = 1f;
             }
 
-            // The rails exchange sides, but retain their original individual lengths.
+            // Rotate the cube's long (local Z) axis directly onto the X/Y rail vector.  Euler
+            // rotation around Z after a 90-degree yaw leaves the long axis horizontal, so it
+            // cannot represent this incline reliably.
+            var leftRailDirection = new Vector3(positiveEndX - negativeEndX, rise, 0f);
+            var leftRailRotation = Quaternion.FromToRotation(Vector3.forward, leftRailDirection.normalized);
             var leftRail = CreateCube(parent, $"{namePrefix} Left", new Vector3(centerX, centerY, z + leftRailZOffset), new Vector3(railWidth, railHeight, length), material);
-            leftRail.transform.rotation = Quaternion.Euler(0f, 90f, pitchDegrees);
+            leftRail.transform.rotation = leftRailRotation;
 
             var rightStartX = shortenRightRail
-                ? startX + railDirection * shortRightStartOffset - InfeedRightRailExtendNegativeXM
-                : startX;
-            var rightStartRatio = Mathf.InverseLerp(startX, endX, rightStartX);
-            var rightStartY = Mathf.Lerp(startY, endY, rightStartRatio);
-            var rightHorizontalLength = Mathf.Abs(rightStartX - endX);
-            var rightRise = endY - rightStartY;
+                ? negativeEndX + railDirection * shortRightStartOffset - InfeedRightRailExtendNegativeXM
+                : negativeEndX;
+            var rightStartRatio = Mathf.InverseLerp(negativeEndX, positiveEndX, rightStartX);
+            var rightStartY = Mathf.Lerp(negativeEndY, positiveEndY, rightStartRatio);
+            var rightHorizontalLength = Mathf.Abs(rightStartX - positiveEndX);
+            var rightRise = positiveEndY - rightStartY;
             var rightLength = Mathf.Sqrt(rightHorizontalLength * rightHorizontalLength + rightRise * rightRise);
-            var rightCenterX = (rightStartX + endX) * 0.5f;
-            var rightRailVerticalOffset = centerY - (rightStartY + endY) * 0.5f;
-            var rightRail = CreateCube(parent, $"{namePrefix} Right", new Vector3(rightCenterX, centerY, z - rightRailZOffset), new Vector3(railWidth, railHeight, rightLength), material);
-            rightRail.transform.rotation = Quaternion.Euler(0f, 90f, pitchDegrees);
+            var rightCenterX = (rightStartX + positiveEndX) * 0.5f;
+            var rightCenterY = (rightStartY + positiveEndY) * 0.5f;
+            var rightRailDirection = new Vector3(positiveEndX - rightStartX, rightRise, 0f);
+            var rightRailRotation = Quaternion.FromToRotation(Vector3.forward, rightRailDirection.normalized);
+            var rightRail = CreateCube(parent, $"{namePrefix} Right", new Vector3(rightCenterX, rightCenterY, z - rightRailZOffset), new Vector3(railWidth, railHeight, rightLength), material);
+            rightRail.transform.rotation = rightRailRotation;
 
-            var basePlate = CreateCube(parent, $"{namePrefix} Base", new Vector3(centerX, 0.42f, z), new Vector3(0.56f, 0.10f, horizontalLength + 0.22f), material);
+            var basePlate = CreateCube(parent, $"{namePrefix} Base", new Vector3(centerX, 0.20f, z), new Vector3(0.56f, 0.10f, horizontalLength + 0.22f), material);
             basePlate.transform.rotation = Quaternion.Euler(0f, 90f, 0f);
 
             if (!createVerticalSupports)
@@ -498,8 +521,8 @@ namespace ConveyorTwin
             for (var i = 0; i < postCount; i++)
             {
                 var ratio = postCount == 1 ? 0f : i / (float)(postCount - 1);
-                var x = Mathf.Lerp(startX, endX, ratio);
-                var railY = Mathf.Lerp(startY, endY, ratio);
+                var x = Mathf.Lerp(negativeEndX, positiveEndX, ratio);
+                var railY = Mathf.Lerp(negativeEndY, positiveEndY, ratio);
                 var postCenterY = (0.48f + railY) * 0.5f;
                 var postHeight = Mathf.Max(0.1f, railY - 0.48f);
                 var isEndPost = i == 0 || i == postCount - 1;
@@ -510,7 +533,7 @@ namespace ConveyorTwin
 
                 if (i != postCount - 1 && (!shortenRightRail || ratio >= rightStartRatio))
                 {
-                    var rightSupportTopY = railY + rightRailVerticalOffset - railHeight * 0.5f + rightSupportRailOverlap;
+                    var rightSupportTopY = railY - railHeight * 0.5f + rightSupportRailOverlap;
                     var rightSupportCenterY = (0.48f + rightSupportTopY) * 0.5f;
                     var rightSupportHeight = Mathf.Max(0.1f, rightSupportTopY - 0.48f);
                     CreateCube(parent, $"{namePrefix} Right Support", new Vector3(x, rightSupportCenterY, z - rightRailZOffset), new Vector3(0.035f, rightSupportHeight, 0.035f), material);
@@ -574,16 +597,27 @@ namespace ConveyorTwin
 
         private void CreateAirBlower(Transform parent, Material metalMaterial, Material airMaterial, BottleVerticalLayout bottleLayout)
         {
-            var nozzlePosition = new Vector3(-2.51699996f, 1.99999995f + bottleLayout.AirBlowerYOffset, -0.89200002f);
             const float armLengthM = 0.48f;
             const float armThicknessM = 0.06f;
-            var armPosition = nozzlePosition + new Vector3(0f, -armThicknessM * 0.5f, armLengthM * 0.5f);
+            var nozzlePosition = new Vector3(-2.93400002f, 1.99999995f + bottleLayout.AirBlowerYOffset, -0.89200002f);
+            var armPosition = new Vector3(-2.94499993f, nozzlePosition.y - armThicknessM * 0.5f, -0.65200001f);
             var standHeightM = armPosition.y - armThicknessM * 0.5f;
-            var standPosition = new Vector3(nozzlePosition.x, standHeightM * 0.5f, nozzlePosition.z + armLengthM);
+            var standPosition = new Vector3(-2.10599995f, standHeightM * 0.5f, -0.41200003f);
 
             // The stand rises from the floor to the arm; the arm reaches the nozzle body from behind.
             CreateCube(parent, "Infeed Air Blower Stand", standPosition, new Vector3(0.07f, standHeightM, 0.07f), metalMaterial);
             CreateCube(parent, "Infeed Air Blower Arm", armPosition, new Vector3(0.07f, armThicknessM, armLengthM), metalMaterial);
+
+            var armRearEnd = armPosition + Vector3.forward * (armLengthM * 0.5f);
+            var standTop = standPosition + Vector3.up * (standHeightM * 0.5f);
+            var connectorDirection = standTop - armRearEnd;
+            var connector = CreateCube(
+                parent,
+                "Infeed Air Blower Arm Stand Connector",
+                Vector3.Lerp(armRearEnd, standTop, 0.5f),
+                new Vector3(0.07f, 0.07f, connectorDirection.magnitude),
+                metalMaterial);
+            connector.transform.rotation = Quaternion.FromToRotation(Vector3.forward, connectorDirection.normalized);
 
             var blower = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             blower.name = "Infeed Air Blower Nozzle";
