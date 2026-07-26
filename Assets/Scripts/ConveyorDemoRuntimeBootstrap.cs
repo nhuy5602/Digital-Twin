@@ -1117,7 +1117,7 @@ namespace ConveyorTwin
             CreateFixedStarWheelBarrier(parent, metalMaterial, bottleLayout);
 
             CreateStarWheelOutfeedReleaseGuide(parent, metalMaterial, bottleLayout);
-            CreateCube(parent, "Filling Star Wheel Base", new Vector3(FillingStarWheelCenterX, 0.415f, -0.928f), new Vector3(1.7617f, 0.16f, 2.1f), metalMaterial);
+            CreateCube(parent, "Filling Star Wheel Base", new Vector3(FillingStarWheelCenterX + 0.452f, 0.415f, -0.928f), new Vector3(1.7617f, 0.16f, 2.1f), metalMaterial);
             return rotatingAssembly.transform;
         }
 
