@@ -328,7 +328,6 @@ namespace ConveyorTwin
         private float QcSensorTriggerZ => qcSensorBeam != null ? qcSensorBeam.position.z : qcZ;
         private float RejectSweepStationZ => rejectSweepBar != null ? rejectSweepBar.position.z : rejectStationZ;
         private float RejectSweepHalfLengthM => GetRejectSweepBounds().extents.z;
-        private float RejectEscapeOutfeedZ => Mathf.Max(packFrontRowZ + 0.60f, RejectSweepStationZ + RejectSweepHalfLengthM + turntableBottleRadius + 0.60f);
 
         private void Awake()
         {
@@ -1147,18 +1146,6 @@ namespace ConveyorTwin
                     continue;
                 }
 
-                if (bottle.status == BottleQualityStatus.RejectEscaped)
-                {
-                    position.z += ConveyorEffectiveSpeedMps * Time.deltaTime;
-                    bottle.transform.position = position;
-                    if (position.z >= RejectEscapeOutfeedZ)
-                    {
-                        CompleteRejectEscape(bottle);
-                    }
-
-                    continue;
-                }
-
                 var onInfeedGuide = bottle.infeedState == InfeedBottleState.OnInfeedGuide;
                 if (!onInfeedGuide && splitLaneAssignments.TryGetValue(bottle, out var assignedLane))
                 {
@@ -1209,7 +1196,7 @@ namespace ConveyorTwin
                     }
                 }
 
-                if (bottle.status == BottleQualityStatus.Capped)
+                if (bottle.status == BottleQualityStatus.Capped || bottle.status == BottleQualityStatus.RejectEscaped)
                 {
                     if (!splitLaneAssignments.ContainsKey(bottle) && position.z >= splitSensorZ)
                     {
@@ -3603,11 +3590,20 @@ namespace ConveyorTwin
                     continue;
                 }
 
-                bottle.status = BottleQualityStatus.AcceptedBin;
-                bottle.RefreshVisuals();
-                CountBottle(bottle, true);
-                packingBottles.Remove(bottle);
-                bottle.gameObject.SetActive(false);
+                if (bottle.status == BottleQualityStatus.RejectEscaped)
+                {
+                    // An escaped reject follows the real downstream mechanics, including the split lanes
+                    // and carton queue, but remains an escape KPI rather than becoming a passing product.
+                    CompleteRejectEscape(bottle);
+                }
+                else
+                {
+                    bottle.status = BottleQualityStatus.AcceptedBin;
+                    bottle.RefreshVisuals();
+                    CountBottle(bottle, true);
+                    packingBottles.Remove(bottle);
+                    bottle.gameObject.SetActive(false);
+                }
             }
 
             if (packCarton != null)

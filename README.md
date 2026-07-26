@@ -88,7 +88,7 @@ Reject không teleport hay đứng chờ thanh gạt:
 - Trong từng frame của cả hành trình ra và về, hệ thống kiểm tra bounds thực tế của thanh gạt cộng bán kính chai.
 - Mọi chai va vào vùng quét đều bị lấy khỏi line và đưa vào reject tray — gồm cả chai lỗi lẫn chai đạt.
 - Nếu reject tray đầy giữa một lượt quét, tray xả trước rồi tiếp tục nhận tất cả chai đã va chạm.
-- Chai lỗi đi qua hết vùng quét mà không bị chạm tiếp tục tới outfeed và chỉ được ghi một lần vào TotalRejectEscapes; nó không được tính pass hay reject đã loại.
+- Chai lỗi đi qua hết vùng quét mà không bị chạm vẫn đi qua A/B Split Guide, xếp hàng và theo carton ra khỏi line như một chai thường. Nó chỉ được ghi một lần vào TotalRejectEscapes; không được tính pass hay reject đã loại.
 
 Vì vậy Conveyor nhanh làm tăng khả năng reject escape hoặc loại nhầm, nhưng không trực tiếp làm chai rót thiếu nước.
 
