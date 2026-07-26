@@ -13,7 +13,8 @@ namespace ConveyorTwin
         Capped = 7,
         Rejected = 8,
         AcceptedBin = 9,
-        RejectedBin = 10
+        RejectedBin = 10,
+        RejectEscaped = 11
     }
 
     public enum InfeedBottleState
@@ -50,6 +51,7 @@ namespace ConveyorTwin
         private Color emptyColor = new Color(0.82f, 0.95f, 1f, 0.35f);
         private Color passedColor = new Color(0.35f, 1f, 0.55f, 0.45f);
         private Color rejectedColor = new Color(1f, 0.35f, 0.25f, 0.45f);
+        private Color escapedRejectColor = new Color(1f, 0.72f, 0.18f, 0.55f);
         private Color liquidColor = new Color(0.1f, 0.55f, 1f, 0.85f);
         private Color capColor = new Color(0.02f, 0.35f, 0.95f, 1f);
 
@@ -104,6 +106,9 @@ namespace ConveyorTwin
                 case BottleQualityStatus.Rejected:
                 case BottleQualityStatus.RejectedBin:
                     bottleRenderer.material.color = rejectedColor;
+                    break;
+                case BottleQualityStatus.RejectEscaped:
+                    bottleRenderer.material.color = escapedRejectColor;
                     break;
                 default:
                     bottleRenderer.material.color = emptyColor;

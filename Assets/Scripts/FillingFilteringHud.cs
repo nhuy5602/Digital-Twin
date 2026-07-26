@@ -20,7 +20,7 @@ namespace ConveyorTwin
 
         public FillingFilteringDigitalTwin process;
         public Vector2 position = new Vector2(16f, 16f);
-        public Vector2 size = new Vector2(700f, 650f);
+        public Vector2 size = new Vector2(700f, 800f);
         [Min(10f)] public float trendWindowSeconds = 60f;
 
         private readonly List<TrendSample> trend = new List<TrendSample>();
@@ -109,7 +109,7 @@ namespace ConveyorTwin
             {
                 draftSetpoints = process.GetSetpoints();
             }
-            var panel = new Rect(position.x, position.y, Mathf.Max(700f, size.x), Mathf.Max(650f, size.y));
+            var panel = new Rect(position.x, position.y, Mathf.Max(700f, size.x), Mathf.Max(800f, size.y));
             DrawPanel(panel);
             var snapshot = process.CreateSnapshot();
 
@@ -141,12 +141,16 @@ namespace ConveyorTwin
             draftSetpoints.conveyorSpeedMps = DrawSlider("Conveyor", draftSetpoints.conveyorSpeedMps, 0.2f, 2.5f, "m/s");
             draftSetpoints.pumpFlowLitersPerMinute = DrawSlider("Pump flow", draftSetpoints.pumpFlowLitersPerMinute, 0f, 300f, "L/min");
             draftSetpoints.infeedMotorSpeedRpm = DrawSlider("Infeed turntable", draftSetpoints.infeedMotorSpeedRpm, 5f, 60f, "rpm");
+            draftSetpoints.starWheelIndexSpeedRpm = DrawSlider("Disc index speed", draftSetpoints.starWheelIndexSpeedRpm, 1f, 30f, "rpm");
+            draftSetpoints.starWheelDwellSeconds = DrawSlider("Disc dwell", draftSetpoints.starWheelDwellSeconds, 0.10f, 5f, "s");
+            ApplyDraftSetpointsIfChanged();
+            GUILayout.Label("Changes apply immediately while dragging.", smallStyle);
             GUILayout.Label($"Release interval: {process.EffectiveReleaseIntervalSeconds:0.00} s (RPM-linked)", smallStyle);
-            GUILayout.Label($"Filling dwell: {process.EffectiveFillingDwellSeconds:0.00} s (conveyor-linked)", smallStyle);
+            GUILayout.Label($"Filling dwell: {process.EffectiveFillingDwellSeconds:0.00} s (Disc-stationary)", smallStyle);
 
             GUILayout.Space(6f);
             GUILayout.BeginHorizontal();
-            if (GUILayout.Button("Apply", GUILayout.Height(28f)))
+            if (GUILayout.Button("Apply now", GUILayout.Height(28f)))
             {
                 process.ApplySetpoints(draftSetpoints);
             }
@@ -179,6 +183,14 @@ namespace ConveyorTwin
             DrawPresetButton("Low pump flow", TwinScenarioPreset.LowPumpFlow);
             DrawPresetButton("High infeed RPM", TwinScenarioPreset.HighInfeedRpm);
             GUILayout.EndHorizontal();
+            GUILayout.BeginHorizontal();
+            DrawPresetButton("Fast Disc index", TwinScenarioPreset.FastDiscIndex);
+            DrawPresetButton("Slow Disc index", TwinScenarioPreset.SlowDiscIndex);
+            GUILayout.EndHorizontal();
+            GUILayout.BeginHorizontal();
+            DrawPresetButton("Short Disc dwell", TwinScenarioPreset.ShortDiscDwell);
+            DrawPresetButton("Long Disc dwell", TwinScenarioPreset.LongDiscDwell);
+            GUILayout.EndHorizontal();
 
             var webServer = GetComponent<TwinDashboardWebServer>();
             if (webServer != null)
@@ -205,6 +217,19 @@ namespace ConveyorTwin
             draftSetpoints = process.GetSetpoints();
         }
 
+        private void ApplyDraftSetpointsIfChanged()
+        {
+            var active = process.GetSetpoints();
+            if (Mathf.Abs(draftSetpoints.conveyorSpeedMps - active.conveyorSpeedMps) > 0.0001f ||
+                Mathf.Abs(draftSetpoints.pumpFlowLitersPerMinute - active.pumpFlowLitersPerMinute) > 0.0001f ||
+                Mathf.Abs(draftSetpoints.infeedMotorSpeedRpm - active.infeedMotorSpeedRpm) > 0.0001f ||
+                Mathf.Abs(draftSetpoints.starWheelIndexSpeedRpm - active.starWheelIndexSpeedRpm) > 0.0001f ||
+                Mathf.Abs(draftSetpoints.starWheelDwellSeconds - active.starWheelDwellSeconds) > 0.0001f)
+            {
+                process.ApplySetpoints(draftSetpoints);
+            }
+        }
+
         private void DrawKpis(TwinSnapshot snapshot)
         {
             GUILayout.Label("LIVE KPI", titleStyle);
@@ -215,6 +240,9 @@ namespace ConveyorTwin
             DrawMetric("Vessel", $"{snapshot.vesselLevelLiters:0.0} / {snapshot.vesselCapacityLiters:0} L");
             DrawMetric("Turntable buffer", $"{snapshot.turntableBufferCount} | line {snapshot.bottlesOnConveyorCount}");
             DrawMetric("Result", $"Pass {snapshot.totalPassed} | Reject {snapshot.totalRejected}");
+            DrawMetric("Reject escapes", snapshot.totalRejectEscapes.ToString());
+            DrawMetric("Disc", $"{snapshot.starWheelIndexSpeedRpm:0.00} rpm | dwell {snapshot.starWheelDwellSeconds:0.00} s");
+            DrawMetric("Disc index", $"{snapshot.starWheelIndexDurationSeconds:0.00} s / pocket");
             DrawMetric("Turntable omega", $"{snapshot.angularSpeedRadPerSec:0.00} rad/s");
             DrawMetric("Centrifugal a", $"{snapshot.centrifugalAccelerationMps2:0.00} m/s²");
             DrawMetric("Star wheel", snapshot.starWheelPhase);

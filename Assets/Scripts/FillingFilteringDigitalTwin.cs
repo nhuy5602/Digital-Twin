@@ -99,8 +99,8 @@ namespace ConveyorTwin
         public float starWheelEntryAngleDegrees = 220f;
         public int fillingStationStartPocketIndex = 2;
         public int starWheelIndexStepPockets = 3;
-        public float starWheelIndexDurationSeconds = 0.32f;
-        public float starWheelContinuousSpeedRpm = 7.5f;
+        [Min(0.1f)] public float starWheelIndexSpeedRpm = 6.67f;
+        [Min(0.10f)] public float starWheelDwellSeconds = 1.35f;
         public float starWheelExitReleaseLeadDegrees = 12f;
         public float starWheelLockRecoverySeconds = 4f;
         public float fillingNozzleStrokeM = 0.26f;
@@ -187,12 +187,7 @@ namespace ConveyorTwin
         [Min(0.01f)] public float infeedGuideCaptureTransitionSeconds = 0.14f;
 
         [Header("Process settings")]
-        [Range(0f, 1f)] public float properFillProbability = 0.9f;
         [Range(0f, 1f)] public float passThreshold = 0.95f;
-        [Tooltip("Filling dwell time. Pump flow, rather than this value, controls the amount dispensed.")]
-        public float fillingTimeSeconds = 1.35f;
-        [Tooltip("Reference conveyor speed used to scale the time a bottle stays under the filling nozzles.")]
-        public float referenceConveyorSpeedMps = 0.85f;
         [Min(0f)] public float pumpFlowLitersPerMinute;
         public float bottleCapacityLiters = 1f;
         public float initialVesselLevelLiters = 120f;
@@ -208,6 +203,7 @@ namespace ConveyorTwin
         public InspectionStatus InspectionStatus { get; private set; } = InspectionStatus.Normal;
         public int TotalPassed { get; private set; }
         public int TotalRejected { get; private set; }
+        public int TotalRejectEscapes { get; private set; }
         public int RejectedTrayBottleCount => rejectedTrayBottles.Count;
         public bool RejectTrayDischargeActive => rejectedTrayDischargeActive;
         public int TurntableBufferCount { get; private set; }
@@ -235,10 +231,7 @@ namespace ConveyorTwin
                 return Mathf.Max(safeInterval, rpmScaledInterval);
             }
         }
-        public float EffectiveFillingDwellSeconds => TwinProcessMath.CalculateFillingDwellSeconds(
-            fillingTimeSeconds,
-            referenceConveyorSpeedMps,
-            conveyorSpeedMps);
+        public float EffectiveFillingDwellSeconds => TwinProcessMath.CalculateDiscDwellSeconds(starWheelDwellSeconds);
         public bool ConveyorStoppedForFilling { get; private set; }
         public bool TurntablePaused { get; private set; }
         public bool StarWheelLocked { get; private set; }
@@ -251,7 +244,7 @@ namespace ConveyorTwin
         private int StarWheelIndexStepPockets => Mathf.Clamp(starWheelIndexStepPockets, 1, Mathf.Max(1, starWheelPocketCount));
         private int StarWheelFeedBatchSize => Mathf.Clamp(Mathf.Min(StarWheelIndexStepPockets, ActiveFillingNozzleCount), 1, Mathf.Max(1, starWheelPocketCount));
         private int FillingExitPocketIndex => Mathf.Max(0, starWheelPocketCount - 1);
-        private float StarWheelAngularSpeedDegreesPerSecond => StarWheelStepAngleDegrees / Mathf.Max(0.05f, starWheelIndexDurationSeconds);
+        private float StarWheelAngularSpeedDegreesPerSecond => Mathf.Max(0.1f, starWheelIndexSpeedRpm) * 6f;
         private float CappingHeadAngularSpeedDegreesPerSecond => StarWheelAngularSpeedDegreesPerSecond * Mathf.Max(1f, cappingSpeedMultiplier);
         private float InfeedGuideBottleSpacingM => Mathf.Max(0.18f, turntableBottleRadius * 1.7f);
         private float InfeedGuideCaptureZoneM => Mathf.Max(0.45f, InfeedGuideBottleSpacingM * StarWheelIndexStepPockets);
@@ -289,6 +282,9 @@ namespace ConveyorTwin
         private readonly HashSet<BottleProcessState> releasingBottles = new HashSet<BottleProcessState>();
         private readonly HashSet<BottleProcessState> cappingBottles = new HashSet<BottleProcessState>();
         private readonly HashSet<BottleProcessState> rejectingBottles = new HashSet<BottleProcessState>();
+        private readonly HashSet<BottleProcessState> rejectSweepRequestedBottles = new HashSet<BottleProcessState>();
+        private readonly HashSet<BottleProcessState> escapedRejectBottles = new HashSet<BottleProcessState>();
+        private readonly List<BottleProcessState> sweepCapturedBottles = new List<BottleProcessState>();
         private readonly List<BottleProcessState> rejectedTrayBottles = new List<BottleProcessState>();
         private readonly HashSet<BottleProcessState> droppingBottles = new HashSet<BottleProcessState>();
         private readonly HashSet<BottleProcessState> capDroppingBottles = new HashSet<BottleProcessState>();
@@ -329,6 +325,9 @@ namespace ConveyorTwin
 
         private float MaxTurntableBottleCenterRadius => Mathf.Max(0.05f, turntableRadius - turntableBottleRadius);
         private float QcSensorTriggerZ => qcSensorBeam != null ? qcSensorBeam.position.z : qcZ;
+        private float RejectSweepStationZ => rejectSweepBar != null ? rejectSweepBar.position.z : rejectStationZ;
+        private float RejectSweepHalfLengthM => GetRejectSweepBounds().extents.z;
+        private float RejectEscapeOutfeedZ => Mathf.Max(packFrontRowZ + 0.60f, RejectSweepStationZ + RejectSweepHalfLengthM + turntableBottleRadius + 0.60f);
 
         private void Awake()
         {
@@ -383,7 +382,9 @@ namespace ConveyorTwin
             {
                 conveyorSpeedMps = conveyorSpeedMps,
                 pumpFlowLitersPerMinute = pumpFlowLitersPerMinute,
-                infeedMotorSpeedRpm = infeedMotorSpeedRpm
+                infeedMotorSpeedRpm = infeedMotorSpeedRpm,
+                starWheelIndexSpeedRpm = starWheelIndexSpeedRpm,
+                starWheelDwellSeconds = starWheelDwellSeconds
             };
         }
 
@@ -397,6 +398,8 @@ namespace ConveyorTwin
             conveyorSpeedMps = Mathf.Clamp(setpoints.conveyorSpeedMps, 0.2f, 2.5f);
             pumpFlowLitersPerMinute = Mathf.Clamp(setpoints.pumpFlowLitersPerMinute, 0f, 300f);
             infeedMotorSpeedRpm = Mathf.Clamp(setpoints.infeedMotorSpeedRpm, 5f, 60f);
+            starWheelIndexSpeedRpm = Mathf.Clamp(setpoints.starWheelIndexSpeedRpm, 1f, 30f);
+            starWheelDwellSeconds = Mathf.Clamp(setpoints.starWheelDwellSeconds, 0.10f, 5f);
         }
 
         public void ApplyPreset(TwinScenarioPreset preset)
@@ -417,6 +420,18 @@ namespace ConveyorTwin
                     break;
                 case TwinScenarioPreset.HighInfeedRpm:
                     settings.infeedMotorSpeedRpm = Mathf.Min(60f, settings.infeedMotorSpeedRpm * 1.65f);
+                    break;
+                case TwinScenarioPreset.FastDiscIndex:
+                    settings.starWheelIndexSpeedRpm = 30f;
+                    break;
+                case TwinScenarioPreset.SlowDiscIndex:
+                    settings.starWheelIndexSpeedRpm = 2f;
+                    break;
+                case TwinScenarioPreset.ShortDiscDwell:
+                    settings.starWheelDwellSeconds = 0.35f;
+                    break;
+                case TwinScenarioPreset.LongDiscDwell:
+                    settings.starWheelDwellSeconds = 3.50f;
                     break;
             }
 
@@ -445,6 +460,10 @@ namespace ConveyorTwin
             {
                 alert = "Low vessel level";
             }
+            else if (TotalRejectEscapes > 0)
+            {
+                alert = "Reject escape detected";
+            }
             else if (RejectRatePercent >= 10f)
             {
                 alert = "High reject rate";
@@ -465,6 +484,9 @@ namespace ConveyorTwin
                 conveyorSpeedMps = conveyorSpeedMps,
                 pumpFlowLitersPerMinute = pumpFlowLitersPerMinute,
                 infeedMotorSpeedRpm = infeedMotorSpeedRpm,
+                starWheelIndexSpeedRpm = starWheelIndexSpeedRpm,
+                starWheelDwellSeconds = EffectiveFillingDwellSeconds,
+                starWheelIndexDurationSeconds = StarWheelIndexDurationForSlots(1),
                 effectiveReleaseIntervalSeconds = EffectiveReleaseIntervalSeconds,
                 effectiveFillingDwellSeconds = EffectiveFillingDwellSeconds,
                 throughputBottlesPerHour = ThroughputBottlesPerHour,
@@ -477,6 +499,7 @@ namespace ConveyorTwin
                 bottlesOnConveyorCount = BottlesOnConveyorCount,
                 totalPassed = TotalPassed,
                 totalRejected = TotalRejected,
+                totalRejectEscapes = TotalRejectEscapes,
                 angularSpeedRadPerSec = TurntableAngularSpeedRadPerSec,
                 centrifugalAccelerationMps2 = CentrifugalAccelerationAtRimMps2,
                 starWheelPhase = StarWheelPhase,
@@ -1113,6 +1136,18 @@ namespace ConveyorTwin
                     continue;
                 }
 
+                if (bottle.status == BottleQualityStatus.RejectEscaped)
+                {
+                    position.z += ConveyorEffectiveSpeedMps * Time.deltaTime;
+                    bottle.transform.position = position;
+                    if (position.z >= RejectEscapeOutfeedZ)
+                    {
+                        CompleteRejectEscape(bottle);
+                    }
+
+                    continue;
+                }
+
                 var onInfeedGuide = bottle.infeedState == InfeedBottleState.OnInfeedGuide;
                 if (!onInfeedGuide && splitLaneAssignments.TryGetValue(bottle, out var assignedLane))
                 {
@@ -1157,8 +1192,10 @@ namespace ConveyorTwin
 
                 if (bottle.status == BottleQualityStatus.Rejected && position.z >= rejectStationZ)
                 {
-                    StartCoroutine(SweepRejectedBottleToTray(bottle));
-                    continue;
+                    if (rejectSweepRequestedBottles.Add(bottle))
+                    {
+                        StartCoroutine(SweepRejectedBottleToTray(bottle));
+                    }
                 }
 
                 if (bottle.status == BottleQualityStatus.Capped)
@@ -1202,6 +1239,17 @@ namespace ConveyorTwin
                     position.x = ResolveLaneX(assignedLane, position.z);
                 }
                 bottle.transform.position = position;
+
+                if (bottle.status == BottleQualityStatus.Rejected &&
+                    !rejectingBottles.Contains(bottle) &&
+                    TwinProcessMath.HasBottlePassedRejectSweepZone(
+                        position.z,
+                        RejectSweepStationZ,
+                        RejectSweepHalfLengthM,
+                        turntableBottleRadius))
+                {
+                    MarkRejectEscaped(bottle);
+                }
 
                 // Keep the bottle neutral through filling and capping. Its pass/fail colour appears only
                 // when its centre has just reached the physical QC beam, not at a separate fixed Z value.
@@ -1503,12 +1551,12 @@ namespace ConveyorTwin
 
         private bool CanCaptureBottleForFilling()
         {
-            return !fillingStationBusy && !fillingCaptureBusy && !StarWheelIndexing && fillingSlotAssignments.Count < starWheelPocketCount;
+            return !fillingStationBusy && !fillingCaptureBusy && !cappingStationBusy && !StarWheelIndexing && fillingSlotAssignments.Count < starWheelPocketCount;
         }
 
         private bool CanIndexStarWheel()
         {
-            return !fillingStationBusy && !fillingCaptureBusy && !StarWheelIndexing && fillingSlotAssignments.Count > 0;
+            return !fillingStationBusy && !fillingCaptureBusy && !cappingStationBusy && !StarWheelIndexing && fillingSlotAssignments.Count > 0;
         }
 
         private int CountUnfilledBottlesInFillingWindow()
@@ -1584,14 +1632,14 @@ namespace ConveyorTwin
 
         private void RecoverStarWheelLocks()
         {
-            var captureTimeout = Mathf.Max(starWheelLockRecoverySeconds, starWheelIndexDurationSeconds * 3f + 1f);
+            var captureTimeout = Mathf.Max(starWheelLockRecoverySeconds, StarWheelIndexDurationForSlots(1) * 3f + 1f);
             if (fillingCaptureBusy && fillingCaptureBusySince > 0f && Time.time - fillingCaptureBusySince > captureTimeout)
             {
                 fillingCaptureBusy = false;
                 fillingCaptureBusySince = -1f;
             }
 
-            var indexTimeout = Mathf.Max(starWheelLockRecoverySeconds, starWheelIndexDurationSeconds * 2f + 1f);
+            var indexTimeout = Mathf.Max(starWheelLockRecoverySeconds, StarWheelIndexDurationForSlots(StarWheelIndexStepPockets) * 2f + 1f);
             if (StarWheelIndexing && starWheelIndexingSince > 0f && Time.time - starWheelIndexingSince > indexTimeout)
             {
                 StarWheelIndexing = false;
@@ -1616,7 +1664,7 @@ namespace ConveyorTwin
 
         private void TryStartStarWheelFeedFromInfeedGuide()
         {
-            if (!fillingStationBusy && !fillingCaptureBusy && !StarWheelIndexing)
+            if (!fillingStationBusy && !fillingCaptureBusy && !cappingStationBusy && !StarWheelIndexing)
             {
                 var readyBatch = GetReadyFillingBatch();
                 if (readyBatch.Count >= ActiveFillingNozzleCount)
@@ -1683,7 +1731,7 @@ namespace ConveyorTwin
 
         private bool ShouldHoldStarWheelForIncompleteFillingBatch(BottleProcessState frontBottle, bool hasBottleWaitingInEntryPocket)
         {
-            if (fillingStationBusy || fillingCaptureBusy || StarWheelIndexing)
+            if (fillingStationBusy || fillingCaptureBusy || cappingStationBusy || StarWheelIndexing)
             {
                 return true;
             }
@@ -1799,7 +1847,7 @@ namespace ConveyorTwin
 
         private void TryStartFillingBatch()
         {
-            if (fillingStationBusy || fillingCaptureBusy || StarWheelIndexing)
+            if (fillingStationBusy || fillingCaptureBusy || cappingStationBusy || StarWheelIndexing)
             {
                 return;
             }
@@ -1864,10 +1912,9 @@ namespace ConveyorTwin
                 bottle.status = BottleQualityStatus.Filling;
                 SnapBottleToFillingSlot(bottle);
 
-                // Random quality remains an independent process defect. Pump flow below the required rate
-                // creates an additional, physical underfill because the target cannot be reached in time.
-                var targetVolume = Random.value <= properFillProbability ? 1f : Random.Range(0.5f, 0.6f);
-                targets[bottle] = targetVolume;
+                // Fill quality is purely mechanical: the pump can only reach the full target when its
+                // flow and the Disc dwell provide enough volume for this bottle.
+                targets[bottle] = 1f;
             }
 
             yield return MoveFillingNozzles(activeSprings, springBasePositions, springDownPositions, fillingNozzleMoveSeconds, batch);
@@ -2176,10 +2223,10 @@ namespace ConveyorTwin
 
         private void InitializeDigitalTwinDefaults()
         {
-            // The default flow preserves the old behaviour: a full batch fills one bottle per nozzle in one dwell.
+            // The default flow fills one bottle per nozzle during the configured stationary Disc dwell.
             if (pumpFlowLitersPerMinute <= 0f)
             {
-                pumpFlowLitersPerMinute = ActiveFillingNozzleCount * bottleCapacityLiters * 60f / Mathf.Max(0.05f, fillingTimeSeconds);
+                pumpFlowLitersPerMinute = ActiveFillingNozzleCount * bottleCapacityLiters * 60f / EffectiveFillingDwellSeconds;
             }
 
             if (referenceReleaseIntervalSeconds <= 0f)
@@ -2571,7 +2618,10 @@ namespace ConveyorTwin
 
         private float StarWheelIndexDurationForSlots(int slotDelta)
         {
-            return Mathf.Max(0.05f, starWheelIndexDurationSeconds) * Mathf.Max(1, slotDelta);
+            return TwinProcessMath.CalculateStarWheelIndexDurationSeconds(
+                starWheelPocketCount,
+                slotDelta,
+                starWheelIndexSpeedRpm);
         }
 
         private float StarWheelReleaseConveyorZ()
@@ -2713,7 +2763,7 @@ namespace ConveyorTwin
             fillingSlotAssignments.Remove(bottle);
 
             var elapsed = 0f;
-            var tangentDuration = Mathf.Max(0.08f, starWheelIndexDurationSeconds * 0.35f);
+            var tangentDuration = Mathf.Max(0.08f, StarWheelIndexDurationForSlots(1) * 0.35f);
             while (elapsed < tangentDuration)
             {
                 elapsed += Time.deltaTime;
@@ -3596,42 +3646,114 @@ namespace ConveyorTwin
 
         private IEnumerator SweepRejectedBottleToTray(BottleProcessState bottle)
         {
-            if (bottle == null || !rejectingBottles.Add(bottle))
+            if (bottle == null)
             {
                 yield break;
             }
 
-            // A fifth reject waits at the station until the full tray clears.
             while (rejectSweepActive || rejectedTrayDischargeActive)
             {
                 yield return null;
             }
 
-            rejectSweepActive = true;
-
-            bottle.transform.position = new Vector3(lineX, bottle.transform.position.y, rejectStationZ);
-
-            var bottleStart = bottle.transform.position;
-            var basePosition = rejectSweepBar != null ? rejectSweepBar.localPosition : Vector3.zero;
-            var traySlot = GetNextRejectedTrayPosition(bottleStart.y);
-            var extendedPosition = new Vector3(traySlot.x + 0.11f, basePosition.y, basePosition.z);
-
-            yield return SweepBottleIntoRejectTray(bottle, bottleStart, traySlot, basePosition, extendedPosition, 0.22f);
-
-            bottle.status = BottleQualityStatus.RejectedBin;
-            bottle.RefreshVisuals();
-            CountBottle(bottle, false);
-            rejectedTrayBottles.Add(bottle);
-            yield return MoveRejectSweepBar(extendedPosition, basePosition, 0.22f);
-
-            if (rejectedTrayBottles.Count >= Mathf.Max(1, rejectedTrayCapacity))
+            // The trigger bottle continues on the conveyor. If it has already cleared the physical
+            // sweep zone, this request becomes a genuine missed reject rather than teleporting it back.
+            if (bottle.status != BottleQualityStatus.Rejected)
             {
-                yield return new WaitForSeconds(rejectedTrayDischargeDelaySeconds);
-                yield return DischargeRejectedTray();
+                rejectSweepRequestedBottles.Remove(bottle);
+                yield break;
             }
 
+            rejectSweepActive = true;
+            var basePosition = rejectSweepBar != null ? rejectSweepBar.localPosition : Vector3.zero;
+            var traySlot = GetNextRejectedTrayPosition(starWheelCenter.y);
+            var extendedPosition = new Vector3(traySlot.x + 0.11f, basePosition.y, basePosition.z);
+
+            yield return MoveRejectSweepBarAndCollect(basePosition, extendedPosition, 0.22f);
+            yield return DepositSweptBottles();
+            yield return MoveRejectSweepBarAndCollect(extendedPosition, basePosition, 0.22f);
+            yield return DepositSweptBottles();
+
             rejectSweepActive = false;
-            rejectingBottles.Remove(bottle);
+            rejectSweepRequestedBottles.Remove(bottle);
+        }
+
+        private Bounds GetRejectSweepBounds()
+        {
+            if (rejectSweepBar != null)
+            {
+                var collider = rejectSweepBar.GetComponent<Collider>();
+                if (collider != null)
+                {
+                    return collider.bounds;
+                }
+
+                var renderer = rejectSweepBar.GetComponent<Renderer>();
+                if (renderer != null)
+                {
+                    return renderer.bounds;
+                }
+
+                return new Bounds(rejectSweepBar.position, Vector3.Scale(rejectSweepBar.lossyScale, new Vector3(0.07f, 0.30f, 0.42f)));
+            }
+
+            return new Bounds(new Vector3(lineX, starWheelCenter.y, rejectStationZ), new Vector3(0.07f, 0.30f, 0.42f));
+        }
+
+        private void CollectBottlesHitByRejectSweepBar()
+        {
+            var sweepBounds = GetRejectSweepBounds();
+            foreach (var candidate in new List<BottleProcessState>(lineBottles))
+            {
+                if (candidate == null ||
+                    rejectingBottles.Contains(candidate) ||
+                    candidate.status == BottleQualityStatus.RejectedBin ||
+                    candidate.status == BottleQualityStatus.RejectEscaped ||
+                    !TwinProcessMath.IsBottleInsideRejectSweepBounds(candidate.transform.position, turntableBottleRadius, sweepBounds))
+                {
+                    continue;
+                }
+
+                rejectingBottles.Add(candidate);
+                rejectSweepRequestedBottles.Remove(candidate);
+                candidate.status = BottleQualityStatus.Rejected;
+                candidate.RefreshVisuals();
+                sweepCapturedBottles.Add(candidate);
+            }
+        }
+
+        private IEnumerator DepositSweptBottles()
+        {
+            while (sweepCapturedBottles.Count > 0)
+            {
+                var bottle = sweepCapturedBottles[0];
+                sweepCapturedBottles.RemoveAt(0);
+                if (bottle == null)
+                {
+                    continue;
+                }
+
+                if (rejectedTrayBottles.Count >= Mathf.Max(1, rejectedTrayCapacity))
+                {
+                    yield return DischargeRejectedTray();
+                }
+
+                var start = bottle.transform.position;
+                var destination = GetNextRejectedTrayPosition(start.y);
+                yield return MoveBottleToRejectTray(bottle, start, destination, 0.12f);
+
+                bottle.status = BottleQualityStatus.RejectedBin;
+                bottle.RefreshVisuals();
+                CountBottle(bottle, false);
+                rejectedTrayBottles.Add(bottle);
+                rejectingBottles.Remove(bottle);
+
+                if (rejectedTrayBottles.Count >= Mathf.Max(1, rejectedTrayCapacity))
+                {
+                    yield return new WaitForSeconds(rejectedTrayDischargeDelaySeconds);
+                    yield return DischargeRejectedTray();
+                }
+            }
         }
 
         private Vector3 GetNextRejectedTrayPosition(float bottleCenterY)
@@ -3714,7 +3836,7 @@ namespace ConveyorTwin
             rejectedTrayDischargeActive = false;
         }
 
-        private IEnumerator SweepBottleIntoRejectTray(BottleProcessState bottle, Vector3 from, Vector3 to, Vector3 barHome, Vector3 barExtended, float duration)
+        private IEnumerator MoveBottleToRejectTray(BottleProcessState bottle, Vector3 from, Vector3 to, float duration)
         {
             if (bottle == null)
             {
@@ -3727,23 +3849,14 @@ namespace ConveyorTwin
             {
                 elapsed += Time.deltaTime;
                 var ratio = Mathf.SmoothStep(0f, 1f, elapsed / moveDuration);
-                if (rejectSweepBar != null)
-                {
-                    rejectSweepBar.localPosition = Vector3.Lerp(barHome, barExtended, ratio);
-                }
-
                 bottle.transform.position = Vector3.Lerp(from, to, ratio);
                 yield return null;
             }
 
             bottle.transform.position = to;
-            if (rejectSweepBar != null)
-            {
-                rejectSweepBar.localPosition = barExtended;
-            }
         }
 
-        private IEnumerator MoveRejectSweepBar(Vector3 from, Vector3 to, float duration)
+        private IEnumerator MoveRejectSweepBarAndCollect(Vector3 from, Vector3 to, float duration)
         {
             if (rejectSweepBar == null)
             {
@@ -3755,10 +3868,42 @@ namespace ConveyorTwin
             {
                 elapsed += Time.deltaTime;
                 rejectSweepBar.localPosition = Vector3.Lerp(from, to, elapsed / duration);
+                CollectBottlesHitByRejectSweepBar();
                 yield return null;
             }
 
             rejectSweepBar.localPosition = to;
+            CollectBottlesHitByRejectSweepBar();
+        }
+
+        private void MarkRejectEscaped(BottleProcessState bottle)
+        {
+            if (bottle == null || !escapedRejectBottles.Add(bottle))
+            {
+                return;
+            }
+
+            rejectSweepRequestedBottles.Remove(bottle);
+            bottle.status = BottleQualityStatus.RejectEscaped;
+            bottle.RefreshVisuals();
+            TotalRejectEscapes++;
+        }
+
+        private void CompleteRejectEscape(BottleProcessState bottle)
+        {
+            if (bottle == null || !escapedRejectBottles.Remove(bottle))
+            {
+                return;
+            }
+
+            lineBottles.Remove(bottle);
+            splitLaneAssignments.Remove(bottle);
+            splitGuidePassedBottles.Remove(bottle);
+            packLaneABottles.Remove(bottle);
+            packLaneBBottles.Remove(bottle);
+            packingBottles.Remove(bottle);
+            completedCount++;
+            bottle.gameObject.SetActive(false);
         }
 
         private void CountBottle(BottleProcessState bottle, bool passed)

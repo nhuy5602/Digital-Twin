@@ -287,13 +287,11 @@ namespace ConveyorTwin
             process.starWheelIndexStepPockets = 3;
             process.capDropPocketIndex = CapDropPocketIndex;
             process.cappingPocketStartIndex = CappingPocketStartIndex;
-            process.starWheelIndexDurationSeconds = 0.9f;
-            process.starWheelContinuousSpeedRpm = 7.5f;
+            // 6.67 RPM preserves the former 0.9 s duration for a 36 degree index.
+            process.starWheelIndexSpeedRpm = 6.67f;
+            process.starWheelDwellSeconds = 1.35f;
             process.infeedMotorSpeedRpm = 18f;
-            process.fillingTimeSeconds = 1.35f;
-            process.referenceConveyorSpeedMps = process.conveyorSpeedMps;
-            process.pumpFlowLitersPerMinute = process.fillingNozzleCount * process.bottleCapacityLiters * 60f / process.fillingTimeSeconds;
-            process.properFillProbability = 0.9f;
+            process.pumpFlowLitersPerMinute = process.fillingNozzleCount * process.bottleCapacityLiters * 60f / process.starWheelDwellSeconds;
             process.passThreshold = 0.95f;
             // Keep each bottle base on its supporting surface while the bottle height changes.
             process.turntableCenter = new Vector3(InfeedTurntableBottleCenter.x, bottleLayout.TurntableBottleCenterY, InfeedTurntableBottleCenter.z);
@@ -1026,7 +1024,7 @@ namespace ConveyorTwin
             var hud = hudObject.AddComponent<FillingFilteringHud>();
             hud.process = process;
             hud.position = new Vector2(16f, 16f);
-            hud.size = new Vector2(700f, 650f);
+            hud.size = new Vector2(700f, 800f);
 
             var webDashboard = hudObject.AddComponent<TwinDashboardWebServer>();
             webDashboard.process = process;

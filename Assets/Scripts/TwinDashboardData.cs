@@ -8,6 +8,8 @@ namespace ConveyorTwin
         public float conveyorSpeedMps;
         public float pumpFlowLitersPerMinute;
         public float infeedMotorSpeedRpm;
+        public float starWheelIndexSpeedRpm;
+        public float starWheelDwellSeconds;
 
         public TwinSetpoints Clone()
         {
@@ -15,7 +17,9 @@ namespace ConveyorTwin
             {
                 conveyorSpeedMps = conveyorSpeedMps,
                 pumpFlowLitersPerMinute = pumpFlowLitersPerMinute,
-                infeedMotorSpeedRpm = infeedMotorSpeedRpm
+                infeedMotorSpeedRpm = infeedMotorSpeedRpm,
+                starWheelIndexSpeedRpm = starWheelIndexSpeedRpm,
+                starWheelDwellSeconds = starWheelDwellSeconds
             };
         }
     }
@@ -28,6 +32,9 @@ namespace ConveyorTwin
         public float conveyorSpeedMps;
         public float pumpFlowLitersPerMinute;
         public float infeedMotorSpeedRpm;
+        public float starWheelIndexSpeedRpm;
+        public float starWheelDwellSeconds;
+        public float starWheelIndexDurationSeconds;
         public float effectiveReleaseIntervalSeconds;
         public float effectiveFillingDwellSeconds;
         public float throughputBottlesPerHour;
@@ -40,6 +47,7 @@ namespace ConveyorTwin
         public int bottlesOnConveyorCount;
         public int totalPassed;
         public int totalRejected;
+        public int totalRejectEscapes;
         public float angularSpeedRadPerSec;
         public float centrifugalAccelerationMps2;
         public string starWheelPhase;
@@ -51,17 +59,41 @@ namespace ConveyorTwin
         Nominal,
         HighConveyor,
         LowPumpFlow,
-        HighInfeedRpm
+        HighInfeedRpm,
+        FastDiscIndex,
+        SlowDiscIndex,
+        ShortDiscDwell,
+        LongDiscDwell
     }
 
     public static class TwinProcessMath
     {
         // Pure helpers keep the physical relations testable without a running scene.
-        public static float CalculateFillingDwellSeconds(float baseDwellSeconds, float referenceConveyorSpeedMps, float conveyorSpeedMps)
+        public static float CalculateDiscDwellSeconds(float dwellSeconds)
         {
-            return UnityEngine.Mathf.Max(
-                0.05f,
-                baseDwellSeconds * UnityEngine.Mathf.Max(0.05f, referenceConveyorSpeedMps) / UnityEngine.Mathf.Max(0.2f, conveyorSpeedMps));
+            return UnityEngine.Mathf.Clamp(dwellSeconds, 0.10f, 5f);
+        }
+
+        public static float CalculateStarWheelIndexDurationSeconds(int pocketCount, int slotDelta, float indexSpeedRpm)
+        {
+            var safePocketCount = UnityEngine.Mathf.Max(1, pocketCount);
+            var safeSlots = UnityEngine.Mathf.Max(1, slotDelta);
+            var safeRpm = UnityEngine.Mathf.Max(0.01f, indexSpeedRpm);
+            var revolutions = safeSlots / (float)safePocketCount;
+            return UnityEngine.Mathf.Max(0.05f, revolutions * 60f / safeRpm);
+        }
+
+        public static bool IsBottleInsideRejectSweepBounds(UnityEngine.Vector3 bottleCenter, float bottleRadius, UnityEngine.Bounds sweepBounds)
+        {
+            var closest = sweepBounds.ClosestPoint(bottleCenter);
+            var horizontalDelta = bottleCenter - closest;
+            horizontalDelta.y = 0f;
+            return horizontalDelta.sqrMagnitude <= UnityEngine.Mathf.Max(0f, bottleRadius) * UnityEngine.Mathf.Max(0f, bottleRadius);
+        }
+
+        public static bool HasBottlePassedRejectSweepZone(float bottleZ, float stationZ, float sweepHalfLengthM, float bottleRadius)
+        {
+            return bottleZ > stationZ + UnityEngine.Mathf.Max(0f, sweepHalfLengthM) + UnityEngine.Mathf.Max(0f, bottleRadius);
         }
 
         public static float CalculateAvailablePumpOutputLiters(float pumpFlowLitersPerMinute, float frameSeconds, float vesselLevelLiters)
