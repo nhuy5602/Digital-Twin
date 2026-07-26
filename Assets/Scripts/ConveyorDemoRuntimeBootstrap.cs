@@ -51,7 +51,7 @@ namespace ConveyorTwin
         private const int FillingStationStartPocketIndex = 1;
         private static readonly int[] FillingNozzlePocketOrder = { 1, 2, 3 };
         private const int CapDropPocketIndex = 5;
-        private const int CappingPocketStartIndex = 7;
+        private const int CappingPocketStartIndex = 6;
         private static readonly Vector3 CapMagazineTubePosition = new Vector3(1.44500005f, 2.09599996f, -1.30999994f);
         private static readonly Vector3 CapMagazineTubeEulerAngles = new Vector3(321.961578f, 0f, 0f);
         private static readonly Vector3 CapMagazineAssemblyLocalOffset = new Vector3(0f, 0.106515377f, -0.136654712f);
@@ -60,7 +60,8 @@ namespace ConveyorTwin
         private const float CapMagazineCapBottomLocalY = -0.63f;
         private const float CapMagazineGuideHalfLength = 0.55f;
         private const float CapMagazineGuideCurveDepth = 0.025f;
-        private const float CapMagazineFeedYOffsetM = -0.03f;
+        // The magazine has been lowered by 0.03 m, then a further 0.06 m.
+        private const float CapMagazineFeedYOffsetM = -0.09f;
         private const float FillingNozzleScaleY = 0.32f;
         private const float FillingNozzleMainRailThicknessY = 0.25f;
         private const float FillingNozzleRaiseY = 0.16549993f;
@@ -1116,7 +1117,7 @@ namespace ConveyorTwin
             CreateFixedStarWheelBarrier(parent, metalMaterial, bottleLayout);
 
             CreateStarWheelOutfeedReleaseGuide(parent, metalMaterial, bottleLayout);
-            CreateCube(parent, "Filling Star Wheel Base", new Vector3(FillingStarWheelCenterX, 0.31f, -0.68f), new Vector3(1.7617f, 0.16f, 1.7f), metalMaterial);
+            CreateCube(parent, "Filling Star Wheel Base", new Vector3(FillingStarWheelCenterX, 0.415f, -0.928f), new Vector3(1.7617f, 0.16f, 2.1f), metalMaterial);
             return rotatingAssembly.transform;
         }
 

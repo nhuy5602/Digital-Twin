@@ -119,7 +119,7 @@ namespace ConveyorTwin
         public float capperStrokeM = 0.38f;
         public int capMagazineCapacity = 10;
         public int capDropPocketIndex = 5;
-        public int cappingPocketStartIndex = 7;
+        public int cappingPocketStartIndex = 6;
         public float cappingSpeedMultiplier = 10f;
 
         [Header("Rejected bottle tray")]
@@ -1621,7 +1621,7 @@ namespace ConveyorTwin
                 }
 
                 if (pocketIndex >= cappingPocketStartIndex &&
-                    pocketIndex <= FillingExitPocketIndex &&
+                    pocketIndex < cappingPocketStartIndex + ActiveCappingHeadCount &&
                     !bottle.cappingCompleted)
                 {
                     cappingTargets.Add(entry);
