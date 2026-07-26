@@ -122,6 +122,12 @@ namespace ConveyorTwin
         public int cappingPocketStartIndex = 7;
         public float cappingSpeedMultiplier = 10f;
 
+        [Header("Rejected bottle tray")]
+        [Min(1)] public int rejectedTrayCapacity = 4;
+        [Min(0f)] public float rejectedTrayDischargeDelaySeconds = 0.25f;
+        [Min(0.05f)] public float rejectedTrayDischargeSeconds = 0.85f;
+        public Vector3 rejectedTrayDischargeOffset = new Vector3(-1.15f, 0f, 0f);
+
         [Header("Slat chain conveyor")]
         public float slatPitchM = 0.22f;
         [Range(0f, 0.25f)] public float conveyorSlipRatio = 0.02f;
@@ -190,6 +196,8 @@ namespace ConveyorTwin
         public InspectionStatus InspectionStatus { get; private set; } = InspectionStatus.Normal;
         public int TotalPassed { get; private set; }
         public int TotalRejected { get; private set; }
+        public int RejectedTrayBottleCount => rejectedTrayBottles.Count;
+        public bool RejectTrayDischargeActive => rejectedTrayDischargeActive;
         public int TurntableBufferCount { get; private set; }
         public int BottlesOnConveyorCount { get; private set; }
         public float TurntableAngularSpeedRadPerSec { get; private set; }
@@ -258,6 +266,8 @@ namespace ConveyorTwin
         private bool fillingStationBusy;
         private bool fillingCaptureBusy;
         private bool cappingStationBusy;
+        private bool rejectSweepActive;
+        private bool rejectedTrayDischargeActive;
         private float fillingCaptureBusySince = -1f;
         private float fillingStationBusySince = -1f;
         private float starWheelIndexingSince = -1f;
@@ -3354,6 +3364,14 @@ namespace ConveyorTwin
                 yield break;
             }
 
+            // A fifth reject waits at the station until the full tray clears.
+            while (rejectSweepActive || rejectedTrayDischargeActive)
+            {
+                yield return null;
+            }
+
+            rejectSweepActive = true;
+
             bottle.transform.position = new Vector3(lineX, bottle.transform.position.y, rejectStationZ);
 
             var bottleStart = bottle.transform.position;
@@ -3369,6 +3387,13 @@ namespace ConveyorTwin
             rejectedTrayBottles.Add(bottle);
             yield return MoveRejectSweepBar(extendedPosition, basePosition, 0.22f);
 
+            if (rejectedTrayBottles.Count >= Mathf.Max(1, rejectedTrayCapacity))
+            {
+                yield return new WaitForSeconds(rejectedTrayDischargeDelaySeconds);
+                yield return DischargeRejectedTray();
+            }
+
+            rejectSweepActive = false;
             rejectingBottles.Remove(bottle);
         }
 
@@ -3376,14 +3401,70 @@ namespace ConveyorTwin
         {
             var trayCenter = rejectedBottleTray != null
                 ? rejectedBottleTray.position
-                : new Vector3(-0.90f, 0.50f, rejectStationZ);
-            var slot = rejectedTrayBottles.Count;
-            var column = slot % 3;
-            var row = (slot / 3) % 4;
+                : new Vector3(-0.69f, 0.50f, rejectStationZ);
+            var slot = Mathf.Min(rejectedTrayBottles.Count, Mathf.Max(1, rejectedTrayCapacity) - 1);
+            var column = slot % 2;
+            var row = slot / 2;
             return new Vector3(
-                trayCenter.x + (1 - column) * 0.17f,
+                trayCenter.x + (0.5f - column) * 0.34f,
                 bottleCenterY,
-                trayCenter.z + (row - 1.5f) * 0.16f);
+                trayCenter.z + (0.5f - row) * 0.22f);
+        }
+
+        private IEnumerator DischargeRejectedTray()
+        {
+            if (rejectedTrayDischargeActive || rejectedTrayBottles.Count < Mathf.Max(1, rejectedTrayCapacity))
+            {
+                yield break;
+            }
+
+            rejectedTrayDischargeActive = true;
+            var batch = new List<BottleProcessState>(rejectedTrayBottles);
+            var bottleStarts = new List<Vector3>();
+            foreach (var bottle in batch)
+            {
+                bottleStarts.Add(bottle != null ? bottle.transform.position : Vector3.zero);
+            }
+
+            var trayStart = rejectedBottleTray != null ? rejectedBottleTray.position : Vector3.zero;
+            var trayTarget = trayStart + rejectedTrayDischargeOffset;
+            var elapsed = 0f;
+            var duration = Mathf.Max(0.05f, rejectedTrayDischargeSeconds);
+            while (elapsed < duration)
+            {
+                elapsed += Time.deltaTime;
+                var ratio = Mathf.SmoothStep(0f, 1f, elapsed / duration);
+                if (rejectedBottleTray != null)
+                {
+                    rejectedBottleTray.position = Vector3.Lerp(trayStart, trayTarget, ratio);
+                }
+
+                for (var i = 0; i < batch.Count; i++)
+                {
+                    if (batch[i] != null)
+                    {
+                        batch[i].transform.position = Vector3.Lerp(bottleStarts[i], bottleStarts[i] + rejectedTrayDischargeOffset, ratio);
+                    }
+                }
+
+                yield return null;
+            }
+
+            foreach (var bottle in batch)
+            {
+                if (bottle != null)
+                {
+                    bottle.gameObject.SetActive(false);
+                }
+            }
+
+            rejectedTrayBottles.Clear();
+            if (rejectedBottleTray != null)
+            {
+                rejectedBottleTray.position = trayStart;
+            }
+
+            rejectedTrayDischargeActive = false;
         }
 
         private IEnumerator SweepBottleIntoRejectTray(BottleProcessState bottle, Vector3 from, Vector3 to, Vector3 barHome, Vector3 barExtended, float duration)

@@ -31,11 +31,15 @@ namespace ConveyorTwin
         // Keep this shared by the bottle mesh, the pinched infeed rails, and the star-wheel pockets.
         private const float BottleBodyDiameterM = 0.14f;
         private const float BottleBodyRadiusM = BottleBodyDiameterM * 0.5f;
+        private const float BottleCapDiameterM = 0.075f;
+        private const float CapMagazineOriginalCapDiameterM = 0.105f;
+        private const float CapMagazineTubeCrossSectionScale = BottleCapDiameterM / CapMagazineOriginalCapDiameterM;
         private const float FillingStarWheelPocketNotchRadius = BottleBodyRadiusM;
         private const float FillingStarWheelOuterRadius = 0.8f;
-        private const float StarWheelContinuousBarrierRadius = FillingStarWheelOuterRadius + 0.045f;
+        // The bottle centre sits on the disc edge, which is also the centre of each semicircular pocket.
+        private const float FillingStarWheelBottleRadius = FillingStarWheelOuterRadius;
+        private const float StarWheelContinuousBarrierRadius = FillingStarWheelBottleRadius + BottleBodyRadiusM + 0.045f;
         private const float FillingNozzleMainRailRadius = StarWheelContinuousBarrierRadius + 0.1f;
-        private const float FillingStarWheelBottleRadius = FillingStarWheelOuterRadius - FillingStarWheelPocketNotchRadius;
         private const float StarWheelDiscLoweringM = 0.288f;
         private const float InfeedRailThicknessM = 0.035f;
         private const float InfeedRailHeightM = 0.10f;
@@ -56,6 +60,7 @@ namespace ConveyorTwin
         private const float CapMagazineCapBottomLocalY = -0.63f;
         private const float CapMagazineGuideHalfLength = 0.55f;
         private const float CapMagazineGuideCurveDepth = 0.025f;
+        private const float CapMagazineFeedYOffsetM = -0.03f;
         private const float FillingNozzleScaleY = 0.32f;
         private const float FillingNozzleMainRailThicknessY = 0.25f;
         private const float FillingNozzleRaiseY = 0.16549993f;
@@ -64,6 +69,11 @@ namespace ConveyorTwin
         private const float FillingFirstZ = -1.2f;
         private const float CappingFirstZ = 1.65f;
         private const float CappingPitch = 0.42f;
+        // The bottle cap and each magazine cap use the same cylinder height.
+        private const float CapMagazineTubeCapHalfHeightM = 0.018f;
+        private const float BottleCapNeckClearanceM = 0.004f;
+        // The tray's open side is flush with the left edge of the A-conveyor support (-0.34 m).
+        private const float RejectedBottleTrayCenterX = -0.69f;
 
         [Header("Flexible bottle height")]
         [Tooltip("Vertical scale applied to the bottle. 0.85 makes the bottle 15% shorter while keeping its base on the supporting surface. Rebuild the demo after changing it.")]
@@ -89,8 +99,6 @@ namespace ConveyorTwin
             private const float FullScaleBodyHalfHeight = 0.42f;
             private const float FullScaleNeckCenterOffsetY = 0.48f;
             private const float FullScaleNeckHalfHeight = 0.13f;
-            private const float FullScaleCapCenterOffsetY = 0.66f;
-            private const float FullScaleCapHalfHeight = 0.045f;
             private const float FullScaleDiscY = 1.485f;
             private const float FullScaleExitGuideY = 1.342f;
             private const float HubSupportBottomY = 0.08f;
@@ -113,8 +121,8 @@ namespace ConveyorTwin
             public float BodyHalfHeight => FullScaleBodyHalfHeight * HeightScale;
             public float NeckCenterOffsetY => FullScaleNeckCenterOffsetY * HeightScale;
             public float NeckHalfHeight => FullScaleNeckHalfHeight * HeightScale;
-            public float CapCenterOffsetY => FullScaleCapCenterOffsetY * HeightScale;
-            public float CapHalfHeight => FullScaleCapHalfHeight * HeightScale;
+            public float CapCenterOffsetY => NeckCenterOffsetY + NeckHalfHeight + BottleCapNeckClearanceM + CapHalfHeight;
+            public float CapHalfHeight => CapMagazineTubeCapHalfHeightM;
             public float LiquidBottomOffsetY => -0.32f * HeightScale;
             public float ConveyorBottleCenterY => ConveyorBottleBaseY + BodyHalfHeight;
             public float TurntableBottleCenterY => TurntableBottleBaseY + BodyHalfHeight;
@@ -151,7 +159,9 @@ namespace ConveyorTwin
 
             private static float FullScaleTurntableBottleCenterY => TurntableBottleBaseY + FullScaleBodyHalfHeight;
             private static float FullScaleNeckTopY => ConveyorBottleBaseY + FullScaleBodyHalfHeight + FullScaleNeckCenterOffsetY + FullScaleNeckHalfHeight;
-            private static float FullScaleBottleTopY => ConveyorBottleBaseY + FullScaleBodyHalfHeight + FullScaleCapCenterOffsetY + FullScaleCapHalfHeight;
+            private static float FullScaleBottleTopY => ConveyorBottleBaseY + FullScaleBodyHalfHeight
+                                                       + FullScaleNeckCenterOffsetY + FullScaleNeckHalfHeight
+                                                       + BottleCapNeckClearanceM + CapMagazineTubeCapHalfHeightM * 2f;
         }
 
         private void OnEnable()
@@ -877,15 +887,14 @@ namespace ConveyorTwin
             const float rejectStationZ = 1.15f;
             var tray = new GameObject("Rejected Bottle Tray");
             tray.transform.SetParent(parent);
-            tray.transform.position = new Vector3(-0.90f, 0.50f, rejectStationZ);
+            tray.transform.position = new Vector3(RejectedBottleTrayCenterX, 0.50f, rejectStationZ);
 
-            CreateCube(tray.transform, "Rejected Bottle Tray Base", new Vector3(-0.90f, 0.47f, rejectStationZ), new Vector3(0.70f, 0.06f, 0.82f), metalMaterial);
-            CreateCube(tray.transform, "Rejected Bottle Tray Outer Wall", new Vector3(-1.25f, 0.61f, rejectStationZ), new Vector3(0.05f, 0.28f, 0.82f), rejectMaterial);
-            CreateCube(tray.transform, "Rejected Bottle Tray Inner Wall", new Vector3(-0.55f, 0.61f, rejectStationZ), new Vector3(0.05f, 0.28f, 0.82f), rejectMaterial);
-            CreateCube(tray.transform, "Rejected Bottle Tray Front Wall", new Vector3(-0.90f, 0.61f, rejectStationZ - 0.41f), new Vector3(0.70f, 0.28f, 0.05f), rejectMaterial);
-            CreateCube(tray.transform, "Rejected Bottle Tray Rear Wall", new Vector3(-0.90f, 0.61f, rejectStationZ + 0.41f), new Vector3(0.70f, 0.28f, 0.05f), rejectMaterial);
-            CreateFloorSupportLeg(tray.transform, "Rejected Bottle Tray Front Floor Support", new Vector3(-1.15f, 0.44f, rejectStationZ - 0.27f), metalMaterial);
-            CreateFloorSupportLeg(tray.transform, "Rejected Bottle Tray Rear Floor Support", new Vector3(-1.15f, 0.44f, rejectStationZ + 0.27f), metalMaterial);
+            CreateCube(tray.transform, "Rejected Bottle Tray Base", new Vector3(RejectedBottleTrayCenterX, 0.47f, rejectStationZ), new Vector3(0.70f, 0.06f, 0.82f), metalMaterial);
+            CreateCube(tray.transform, "Rejected Bottle Tray Outer Wall", new Vector3(RejectedBottleTrayCenterX - 0.35f, 0.61f, rejectStationZ), new Vector3(0.05f, 0.28f, 0.82f), rejectMaterial);
+            CreateCube(tray.transform, "Rejected Bottle Tray Front Wall", new Vector3(RejectedBottleTrayCenterX, 0.61f, rejectStationZ - 0.41f), new Vector3(0.70f, 0.28f, 0.05f), rejectMaterial);
+            CreateCube(tray.transform, "Rejected Bottle Tray Rear Wall", new Vector3(RejectedBottleTrayCenterX, 0.61f, rejectStationZ + 0.41f), new Vector3(0.70f, 0.28f, 0.05f), rejectMaterial);
+            CreateFloorSupportLeg(tray.transform, "Rejected Bottle Tray Front Floor Support", new Vector3(RejectedBottleTrayCenterX - 0.25f, 0.44f, rejectStationZ - 0.27f), metalMaterial);
+            CreateFloorSupportLeg(tray.transform, "Rejected Bottle Tray Rear Floor Support", new Vector3(RejectedBottleTrayCenterX - 0.25f, 0.44f, rejectStationZ + 0.27f), metalMaterial);
 
             var sweepBar = CreateCube(parent, "Reject Sweep Bar", new Vector3(0.43f, 0.78f, rejectStationZ), new Vector3(0.07f, 0.30f, 0.42f), rejectMaterial).transform;
             CreateFloorSupportLeg(parent, "Reject Sweep Bar Home Post", new Vector3(0.57f, 0.64f, rejectStationZ), metalMaterial);
@@ -978,7 +987,7 @@ namespace ConveyorTwin
             cap.name = "Bottle Cap";
             cap.transform.SetParent(bottleRoot.transform);
             cap.transform.localPosition = new Vector3(0f, bottleLayout.CapCenterOffsetY, 0f);
-            cap.transform.localScale = new Vector3(0.075f, bottleLayout.CapHalfHeight, 0.075f);
+            cap.transform.localScale = new Vector3(BottleCapDiameterM, bottleLayout.CapHalfHeight, BottleCapDiameterM);
             cap.GetComponent<Renderer>().sharedMaterial = capMaterial;
             cap.SetActive(false);
 
@@ -1080,7 +1089,7 @@ namespace ConveyorTwin
             disc.transform.SetParent(rotatingAssembly.transform);
             disc.transform.localPosition = Vector3.zero;
             var meshFilter = disc.AddComponent<MeshFilter>();
-            meshFilter.sharedMesh = CreateScallopedStarWheelMesh(FillingStarWheelPocketCount, FillingStarWheelOuterRadius, FillingStarWheelPocketNotchRadius, 0.08f, 18, FillingStarWheelEntryAngleDegrees);
+            meshFilter.sharedMesh = CreateScallopedStarWheelMesh(FillingStarWheelPocketCount, FillingStarWheelOuterRadius, FillingStarWheelPocketNotchRadius, 0.08f, 48, FillingStarWheelEntryAngleDegrees);
             disc.AddComponent<MeshRenderer>().sharedMaterial = wheelMaterial;
 
             var hub = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
@@ -1131,10 +1140,10 @@ namespace ConveyorTwin
 
         private void CreateFixedStarWheelBarrier(Transform parent, Material material, BottleVerticalLayout bottleLayout)
         {
-            const float starBarrierRadius = FillingStarWheelOuterRadius + 0.045f;
+            const float starBarrierRadius = StarWheelContinuousBarrierRadius;
             var starBarrierY = bottleLayout.StarWheelDiscY;
             var startDegrees = StarWheelPocketAngleDegrees(0) + starWheelBarrierEntryLeadDegrees; 
-            var arcDegrees = 360f - starWheelBarrierOpeningDegrees -17f;
+            var arcDegrees = 360f - starWheelBarrierOpeningDegrees -5f;
             var segmentCount = Mathf.Max(2, starWheelBarrierSegments);
 
             var starBarrierSegmentLength = starBarrierRadius * Mathf.Deg2Rad * (arcDegrees / segmentCount) * 1.08f;
@@ -1157,14 +1166,14 @@ namespace ConveyorTwin
             }
         }
 
-        private Mesh CreateScallopedStarWheelMesh(int pocketCount, float outerRadius, float pocketDepth, float thickness, int samplesPerPocket, float pocketAngleOffsetDegrees)
+        private Mesh CreateScallopedStarWheelMesh(int pocketCount, float outerRadius, float pocketRadius, float thickness, int samplesPerPocket, float pocketAngleOffsetDegrees)
         {
             var ringCount = pocketCount * samplesPerPocket;
             var vertices = new Vector3[2 + ringCount * 2];
             var triangles = new List<int>(ringCount * 12);
             var pocketAngle = Mathf.PI * 2f / pocketCount;
             var pocketAngleOffset = pocketAngleOffsetDegrees * Mathf.Deg2Rad;
-            var halfPocketWidth = Mathf.Asin(Mathf.Clamp(pocketDepth / outerRadius, 0.01f, 0.45f));
+            var halfPocketWidth = Mathf.Asin(Mathf.Clamp(pocketRadius / outerRadius, 0.01f, 0.45f));
 
             vertices[0] = new Vector3(0f, thickness * 0.5f, 0f);
             vertices[1] = new Vector3(0f, -thickness * 0.5f, 0f);
@@ -1174,10 +1183,14 @@ namespace ConveyorTwin
                 var angle = pocketAngleOffset + i * Mathf.PI * 2f / ringCount;
                 var centered = Mathf.Repeat(angle - pocketAngleOffset + pocketAngle * 0.5f, pocketAngle) - pocketAngle * 0.5f;
                 var tangentDistance = Mathf.Sin(centered) * outerRadius;
-                var cutAmount = Mathf.Abs(centered) <= halfPocketWidth && Mathf.Abs(tangentDistance) <= pocketDepth
-                    ? Mathf.Sqrt(Mathf.Max(0f, pocketDepth * pocketDepth - tangentDistance * tangentDistance))
-                    : 0f;
-                var radius = outerRadius - cutAmount;
+                // This is the inner arc of a circle whose centre is on the original disc edge.
+                // Therefore the pocket is a true semicircular bottle cradle, not a radial approximation.
+                var radius = outerRadius;
+                if (Mathf.Abs(centered) <= halfPocketWidth && Mathf.Abs(tangentDistance) <= pocketRadius)
+                {
+                    radius = outerRadius * Mathf.Cos(centered)
+                             - Mathf.Sqrt(Mathf.Max(0f, pocketRadius * pocketRadius - tangentDistance * tangentDistance));
+                }
                 var x = Mathf.Cos(angle) * radius;
                 var z = Mathf.Sin(angle) * radius;
 
@@ -1234,7 +1247,7 @@ namespace ConveyorTwin
             var capMagazineAssembly = new GameObject("Cap Magazine Assembly");
             capMagazineAssembly.transform.SetParent(parent);
             var capMagazinePosition = CapMagazineTubePosition;
-            capMagazinePosition.y = bottleLayout.CapMagazineAssemblyY;
+            capMagazinePosition.y = bottleLayout.CapMagazineAssemblyY + CapMagazineFeedYOffsetM;
             capMagazineAssembly.transform.position = capMagazinePosition;
             capMagazineAssembly.transform.rotation = Quaternion.Euler(CapMagazineTubeEulerAngles);
 
@@ -1242,13 +1255,14 @@ namespace ConveyorTwin
             capTube.transform.SetParent(capMagazineAssembly.transform);
             capTube.transform.localPosition = CapMagazineAssemblyLocalOffset;
             capTube.transform.localRotation = Quaternion.identity;
+            capTube.transform.localScale = new Vector3(CapMagazineTubeCrossSectionScale, 1f, CapMagazineTubeCrossSectionScale);
             var tubeMeshFilter = capTube.AddComponent<MeshFilter>();
             tubeMeshFilter.sharedMesh = CreateCurvedCapMagazineMesh(28, 0.20f, 0.10f);
             capTube.AddComponent<MeshRenderer>().sharedMaterial = capTubeMaterial;
 
             var tubeOutlet = capMagazineAssembly.transform.TransformPoint(
                 CapMagazineAssemblyLocalOffset + CapMagazineLocalPosition(-CapMagazineGuideHalfLength));
-            var defaultOutletPosition = new Vector3(capDropPosition.x, bottleLayout.CapMagazineOutletY, capDropPosition.z)
+            var defaultOutletPosition = new Vector3(capDropPosition.x, bottleLayout.CapMagazineOutletY + CapMagazineFeedYOffsetM, capDropPosition.z)
                 + capMagazineAssembly.transform.TransformVector(CapMagazineAssemblyLocalOffset);
             var guideRailLength = Vector3.Distance(tubeOutlet, defaultOutletPosition);
             var outletCapLocalRotation = Quaternion.Euler(CapMagazineOutletCapLocalEulerAngles);
@@ -1265,7 +1279,7 @@ namespace ConveyorTwin
                 var capLocalY = CapMagazineCapBottomLocalY + (9 - i) * CapMagazineCapPitch;
                 capInTube.transform.localPosition = CapMagazineCapLocalPosition(capLocalY, outletLocalPosition);
                 capInTube.transform.localRotation = CapMagazineCapLocalRotation(capLocalY);
-                capInTube.transform.localScale = new Vector3(0.105f, 0.018f, 0.105f);
+                capInTube.transform.localScale = new Vector3(BottleCapDiameterM, CapMagazineTubeCapHalfHeightM, BottleCapDiameterM);
                 capInTube.GetComponent<Renderer>().sharedMaterial = capMaterial;
                 magazineCaps.Add(capInTube.transform);
             }
