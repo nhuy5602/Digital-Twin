@@ -41812,8 +41812,9 @@ MonoBehaviour:
   cappingPocketStartIndex: 6
   cappingSpeedMultiplier: 10
   rejectedTrayCapacity: 4
-  rejectedTrayDischargeDelaySeconds: 0.25
-  rejectedTrayDischargeSeconds: 0.85
+  rejectedTrayDischargeDelaySeconds: 0.08
+  rejectedTrayDischargeSeconds: 0.1
+  rejectedTrayReturnSeconds: 0.1
   rejectedTrayDischargeOffset: {x: -1.15, y: 0, z: 0}
   slatPitchM: 0.22
   conveyorSlipRatio: 0

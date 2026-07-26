@@ -125,8 +125,9 @@ namespace ConveyorTwin
 
         [Header("Rejected bottle tray")]
         [Min(1)] public int rejectedTrayCapacity = 4;
-        [Min(0f)] public float rejectedTrayDischargeDelaySeconds = 0.25f;
-        [Min(0.05f)] public float rejectedTrayDischargeSeconds = 0.85f;
+        [Min(0f)] public float rejectedTrayDischargeDelaySeconds = 0.08f;
+        [Min(0.05f)] public float rejectedTrayDischargeSeconds = 0.10f;
+        [Min(0.05f)] public float rejectedTrayReturnSeconds = 0.10f;
         public Vector3 rejectedTrayDischargeOffset = new Vector3(-1.15f, 0f, 0f);
 
         [Header("Slat chain conveyor")]
@@ -3697,6 +3698,16 @@ namespace ConveyorTwin
             rejectedTrayBottles.Clear();
             if (rejectedBottleTray != null)
             {
+                elapsed = 0f;
+                var returnDuration = Mathf.Max(0.05f, rejectedTrayReturnSeconds);
+                while (elapsed < returnDuration)
+                {
+                    elapsed += Time.deltaTime;
+                    var ratio = Mathf.SmoothStep(0f, 1f, elapsed / returnDuration);
+                    rejectedBottleTray.position = Vector3.Lerp(trayTarget, trayStart, ratio);
+                    yield return null;
+                }
+
                 rejectedBottleTray.position = trayStart;
             }
 

@@ -308,6 +308,9 @@ namespace ConveyorTwin
             process.referenceReleaseIntervalSeconds = process.releaseIntervalSeconds;
             process.linkInfeedRpmToRelease = true;
             process.infeedGuideWheelCaptureDistanceM = 0.08f;
+            process.rejectedTrayDischargeDelaySeconds = 0.08f;
+            process.rejectedTrayDischargeSeconds = 0.10f;
+            process.rejectedTrayReturnSeconds = 0.10f;
 
             foreach (var conveyorAnimator in root.GetComponentsInChildren<SlatChainConveyorAnimator>())
             {
