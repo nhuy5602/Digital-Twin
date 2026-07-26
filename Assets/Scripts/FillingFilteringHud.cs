@@ -20,7 +20,7 @@ namespace ConveyorTwin
 
         public FillingFilteringDigitalTwin process;
         public Vector2 position = new Vector2(16f, 16f);
-        public Vector2 size = new Vector2(700f, 800f);
+        public Vector2 size = new Vector2(700f, 840f);
         [Min(10f)] public float trendWindowSeconds = 60f;
 
         private readonly List<TrendSample> trend = new List<TrendSample>();
@@ -109,7 +109,7 @@ namespace ConveyorTwin
             {
                 draftSetpoints = process.GetSetpoints();
             }
-            var panel = new Rect(position.x, position.y, Mathf.Max(700f, size.x), Mathf.Max(800f, size.y));
+            var panel = new Rect(position.x, position.y, Mathf.Max(700f, size.x), Mathf.Max(840f, size.y));
             DrawPanel(panel);
             var snapshot = process.CreateSnapshot();
 
@@ -191,6 +191,9 @@ namespace ConveyorTwin
             DrawPresetButton("Short Disc dwell", TwinScenarioPreset.ShortDiscDwell);
             DrawPresetButton("Long Disc dwell", TwinScenarioPreset.LongDiscDwell);
             GUILayout.EndHorizontal();
+            GUILayout.BeginHorizontal();
+            DrawPresetButton("Overflow pump test", TwinScenarioPreset.OverflowPumpTest);
+            GUILayout.EndHorizontal();
 
             var webServer = GetComponent<TwinDashboardWebServer>();
             if (webServer != null)
@@ -240,6 +243,7 @@ namespace ConveyorTwin
             DrawMetric("Vessel", $"{snapshot.vesselLevelLiters:0.0} / {snapshot.vesselCapacityLiters:0} L");
             DrawMetric("Turntable buffer", $"{snapshot.turntableBufferCount} | line {snapshot.bottlesOnConveyorCount}");
             DrawMetric("Result", $"Pass {snapshot.totalPassed} | Reject {snapshot.totalRejected}");
+            DrawMetric("Overflow", snapshot.totalOverflowed.ToString());
             DrawMetric("Reject escapes", snapshot.totalRejectEscapes.ToString());
             DrawMetric("Disc", $"{snapshot.starWheelIndexSpeedRpm:0.00} rpm | dwell {snapshot.starWheelDwellSeconds:0.00} s");
             DrawMetric("Disc index", $"{snapshot.starWheelIndexDurationSeconds:0.00} s / pocket");

@@ -990,6 +990,24 @@ namespace ConveyorTwin
             neck.transform.localScale = new Vector3(0.065f, bottleLayout.NeckHalfHeight, 0.065f);
             neck.GetComponent<Renderer>().sharedMaterial = bottleMaterial;
 
+            var overflowBody = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            overflowBody.name = "Overflow Water - Bottle Body";
+            overflowBody.transform.SetParent(bottleRoot.transform);
+            overflowBody.transform.localPosition = Vector3.zero;
+            overflowBody.transform.localScale = new Vector3(BottleBodyDiameterM * 1.10f, bottleLayout.BodyHalfHeight * 1.04f, BottleBodyDiameterM * 1.10f);
+            overflowBody.GetComponent<Renderer>().sharedMaterial = waterMaterial;
+            overflowBody.GetComponent<Collider>().enabled = false;
+            overflowBody.SetActive(false);
+
+            var overflowNeck = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            overflowNeck.name = "Overflow Water - Bottle Neck";
+            overflowNeck.transform.SetParent(bottleRoot.transform);
+            overflowNeck.transform.localPosition = new Vector3(0f, bottleLayout.NeckCenterOffsetY, 0f);
+            overflowNeck.transform.localScale = new Vector3(0.065f * 1.16f, bottleLayout.NeckHalfHeight * 1.06f, 0.065f * 1.16f);
+            overflowNeck.GetComponent<Renderer>().sharedMaterial = waterMaterial;
+            overflowNeck.GetComponent<Collider>().enabled = false;
+            overflowNeck.SetActive(false);
+
             var cap = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             cap.name = "Bottle Cap";
             cap.transform.SetParent(bottleRoot.transform);
@@ -1009,6 +1027,8 @@ namespace ConveyorTwin
             state.bottleRenderer = body.GetComponent<Renderer>();
             state.liquidRenderer = liquid.GetComponent<Renderer>();
             state.liquidVisual = liquid.transform;
+            state.overflowBodyVisual = overflowBody.transform;
+            state.overflowNeckVisual = overflowNeck.transform;
             state.capVisual = cap.transform;
             state.capRenderer = cap.GetComponent<Renderer>();
             state.liquidVerticalScale = bottleLayout.HeightScale;
@@ -1024,7 +1044,7 @@ namespace ConveyorTwin
             var hud = hudObject.AddComponent<FillingFilteringHud>();
             hud.process = process;
             hud.position = new Vector2(16f, 16f);
-            hud.size = new Vector2(700f, 800f);
+            hud.size = new Vector2(700f, 840f);
 
             var webDashboard = hudObject.AddComponent<TwinDashboardWebServer>();
             webDashboard.process = process;

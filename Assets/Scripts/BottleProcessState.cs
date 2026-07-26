@@ -29,9 +29,11 @@ namespace ConveyorTwin
 
     public class BottleProcessState : MonoBehaviour
     {
-        [Range(0f, 1f)] public float liquidVolume01;
+        [Min(0f)] public float liquidVolume01;
         public BottleQualityStatus status = BottleQualityStatus.Empty;
         public bool isDefective;
+        public bool isOverflowed;
+        public bool overflowCounted;
         public bool fillingCompleted;
         public bool inspectionCompleted;
         public bool capPlaced;
@@ -43,6 +45,8 @@ namespace ConveyorTwin
 
         [Header("Visuals")]
         public Transform liquidVisual;
+        public Transform overflowBodyVisual;
+        public Transform overflowNeckVisual;
         public Renderer bottleRenderer;
         public Renderer liquidRenderer;
         public Renderer capRenderer;
@@ -54,11 +58,18 @@ namespace ConveyorTwin
         private Color escapedRejectColor = new Color(1f, 0.72f, 0.18f, 0.55f);
         private Color liquidColor = new Color(0.1f, 0.55f, 1f, 0.85f);
         private Color capColor = new Color(0.02f, 0.35f, 0.95f, 1f);
+        private bool overflowVisualsConfigured;
 
         public void SetVolume(float volume01)
         {
-            liquidVolume01 = Mathf.Clamp01(volume01);
+            liquidVolume01 = Mathf.Max(0f, volume01);
+            isOverflowed = liquidVolume01 > 1f;
             RefreshVisuals();
+        }
+
+        public bool IsFillWithinSpecification(float passThreshold)
+        {
+            return TwinProcessMath.IsFillWithinSpecification(liquidVolume01, passThreshold);
         }
 
         public void MarkPassed()
@@ -75,15 +86,31 @@ namespace ConveyorTwin
 
         public void RefreshVisuals()
         {
+            var displayedVolume = Mathf.Clamp01(liquidVolume01);
             if (liquidVisual != null)
             {
                 var scale = liquidVisual.localScale;
-                scale.y = Mathf.Lerp(0.02f, 0.38f, liquidVolume01) * liquidVerticalScale;
+                scale.y = Mathf.Lerp(0.02f, 0.38f, displayedVolume) * liquidVerticalScale;
                 liquidVisual.localScale = scale;
 
                 var localPosition = liquidVisual.localPosition;
-                localPosition.y = Mathf.Lerp(-0.30f, -0.04f, liquidVolume01) * liquidVerticalScale;
+                localPosition.y = Mathf.Lerp(-0.30f, -0.04f, displayedVolume) * liquidVerticalScale;
                 liquidVisual.localPosition = localPosition;
+            }
+
+            if (isOverflowed)
+            {
+                EnsureOverflowVisuals();
+            }
+
+            if (overflowBodyVisual != null)
+            {
+                overflowBodyVisual.gameObject.SetActive(isOverflowed);
+            }
+
+            if (overflowNeckVisual != null)
+            {
+                overflowNeckVisual.gameObject.SetActive(isOverflowed);
             }
 
             if (liquidRenderer != null)
@@ -130,6 +157,83 @@ namespace ConveyorTwin
                     rendererToTint.material.SetColor("_BaseColor", capColor);
                     rendererToTint.material.SetColor("_Color", capColor);
                 }
+            }
+        }
+
+        private void EnsureOverflowVisuals()
+        {
+            if (overflowBodyVisual == null && bottleRenderer != null)
+            {
+                overflowBodyVisual = CreateOverflowShell("Overflow Water - Bottle Body", bottleRenderer.transform, 1.10f, 1.04f);
+            }
+
+            if (overflowNeckVisual == null)
+            {
+                var neck = transform.Find("Bottle Neck");
+                if (neck != null)
+                {
+                    overflowNeckVisual = CreateOverflowShell("Overflow Water - Bottle Neck", neck, 1.16f, 1.06f);
+                }
+            }
+
+            if (overflowVisualsConfigured)
+            {
+                return;
+            }
+
+            ConfigureOverflowRenderer(overflowBodyVisual);
+            ConfigureOverflowRenderer(overflowNeckVisual);
+            overflowVisualsConfigured = overflowBodyVisual != null || overflowNeckVisual != null;
+        }
+
+        private Transform CreateOverflowShell(string objectName, Transform source, float radialScale, float verticalScale)
+        {
+            var shell = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            shell.name = objectName;
+            shell.transform.SetParent(source.parent);
+            shell.transform.localPosition = source.localPosition;
+            shell.transform.localRotation = source.localRotation;
+            var sourceScale = source.localScale;
+            shell.transform.localScale = new Vector3(sourceScale.x * radialScale, sourceScale.y * verticalScale, sourceScale.z * radialScale);
+
+            var shellRenderer = shell.GetComponent<Renderer>();
+            if (liquidRenderer != null)
+            {
+                shellRenderer.sharedMaterial = liquidRenderer.sharedMaterial;
+            }
+
+            var shellCollider = shell.GetComponent<Collider>();
+            if (shellCollider != null)
+            {
+                shellCollider.enabled = false;
+            }
+
+            shell.SetActive(false);
+            return shell.transform;
+        }
+
+        private static void ConfigureOverflowRenderer(Transform overflowVisual)
+        {
+            if (overflowVisual == null || !overflowVisual.TryGetComponent<Renderer>(out var overflowRenderer))
+            {
+                return;
+            }
+
+            var material = overflowRenderer.material;
+            var overflowColor = new Color(0.02f, 0.38f, 1f, 0.92f);
+            if (material.HasProperty("_BaseColor"))
+            {
+                material.SetColor("_BaseColor", overflowColor);
+            }
+
+            if (material.HasProperty("_Color"))
+            {
+                material.SetColor("_Color", overflowColor);
+            }
+            if (material.HasProperty("_EmissionColor"))
+            {
+                material.SetColor("_EmissionColor", new Color(0.01f, 0.10f, 0.65f, 1f));
+                material.EnableKeyword("_EMISSION");
             }
         }
     }

@@ -203,6 +203,7 @@ namespace ConveyorTwin
         public InspectionStatus InspectionStatus { get; private set; } = InspectionStatus.Normal;
         public int TotalPassed { get; private set; }
         public int TotalRejected { get; private set; }
+        public int TotalOverflowed { get; private set; }
         public int TotalRejectEscapes { get; private set; }
         public int RejectedTrayBottleCount => rejectedTrayBottles.Count;
         public bool RejectTrayDischargeActive => rejectedTrayDischargeActive;
@@ -433,6 +434,9 @@ namespace ConveyorTwin
                 case TwinScenarioPreset.LongDiscDwell:
                     settings.starWheelDwellSeconds = 3.50f;
                     break;
+                case TwinScenarioPreset.OverflowPumpTest:
+                    settings.pumpFlowLitersPerMinute = 300f;
+                    break;
             }
 
             ApplySetpoints(settings);
@@ -456,7 +460,11 @@ namespace ConveyorTwin
         public TwinSnapshot CreateSnapshot()
         {
             var alert = "Normal";
-            if (LiquidLevelLiters <= bottleCapacityLiters * ActiveFillingNozzleCount)
+            if (TotalOverflowed > 0)
+            {
+                alert = "Overflow detected";
+            }
+            else if (LiquidLevelLiters <= bottleCapacityLiters * ActiveFillingNozzleCount)
             {
                 alert = "Low vessel level";
             }
@@ -499,6 +507,7 @@ namespace ConveyorTwin
                 bottlesOnConveyorCount = BottlesOnConveyorCount,
                 totalPassed = TotalPassed,
                 totalRejected = TotalRejected,
+                totalOverflowed = TotalOverflowed,
                 totalRejectEscapes = TotalRejectEscapes,
                 angularSpeedRadPerSec = TurntableAngularSpeedRadPerSec,
                 centrifugalAccelerationMps2 = CentrifugalAccelerationAtRimMps2,
@@ -697,8 +706,10 @@ namespace ConveyorTwin
         {
             bottle.name = $"Bottle {spawnedCount:00}";
             bottle.gameObject.SetActive(true);
+            bottle.status = BottleQualityStatus.Empty;
             bottle.SetVolume(0f);
             bottle.isDefective = false;
+            bottle.overflowCounted = false;
             bottle.fillingCompleted = false;
             bottle.inspectionCompleted = false;
             bottle.capPlaced = false;
@@ -1912,8 +1923,8 @@ namespace ConveyorTwin
                 bottle.status = BottleQualityStatus.Filling;
                 SnapBottleToFillingSlot(bottle);
 
-                // Fill quality is purely mechanical: the pump can only reach the full target when its
-                // flow and the Disc dwell provide enough volume for this bottle.
+                // The nozzle stays open for the complete Disc dwell. Extra flow is retained as an
+                // overflow condition instead of being silently capped at the nominal bottle volume.
                 targets[bottle] = 1f;
             }
 
@@ -1929,7 +1940,7 @@ namespace ConveyorTwin
                 var activeBottleCount = 0;
                 foreach (var bottle in batch)
                 {
-                    if (bottle != null && targets.TryGetValue(bottle, out var targetVolume) && bottle.liquidVolume01 < targetVolume)
+                    if (bottle != null && targets.ContainsKey(bottle))
                     {
                         activeBottleCount++;
                     }
@@ -1946,16 +1957,20 @@ namespace ConveyorTwin
 
                     foreach (var bottle in batch)
                     {
-                        if (bottle == null || !targets.TryGetValue(bottle, out var targetVolume) || bottle.liquidVolume01 >= targetVolume)
+                        if (bottle == null || !targets.ContainsKey(bottle))
                         {
                             continue;
                         }
 
                         SnapBottleToFillingSlot(bottle);
-                        var remainingLiters = Mathf.Max(0f, targetVolume - bottle.liquidVolume01) * bottleCapacityLiters;
-                        var bottleLiters = Mathf.Min(litersPerBottle, remainingLiters);
-                        bottle.SetVolume(bottle.liquidVolume01 + bottleLiters / Mathf.Max(0.0001f, bottleCapacityLiters));
-                        dispensedLiters += bottleLiters;
+                        bottle.SetVolume(bottle.liquidVolume01 + litersPerBottle / Mathf.Max(0.0001f, bottleCapacityLiters));
+                        if (bottle.isOverflowed && !bottle.overflowCounted)
+                        {
+                            bottle.overflowCounted = true;
+                            TotalOverflowed++;
+                        }
+
+                        dispensedLiters += litersPerBottle;
                     }
 
                     LiquidLevelLiters = Mathf.Max(0f, LiquidLevelLiters - dispensedLiters);
@@ -1972,7 +1987,7 @@ namespace ConveyorTwin
                     continue;
                 }
 
-                bottle.isDefective = bottle.liquidVolume01 < passThreshold;
+                bottle.isDefective = !bottle.IsFillWithinSpecification(passThreshold);
                 bottle.status = BottleQualityStatus.Filled;
                 bottle.fillingCompleted = true;
                 batchFillTotal += bottle.liquidVolume01;
@@ -3195,7 +3210,7 @@ namespace ConveyorTwin
         private void InspectBottle(BottleProcessState bottle)
         {
             bottle.inspectionCompleted = true;
-            if (bottle.liquidVolume01 >= passThreshold)
+            if (bottle.IsFillWithinSpecification(passThreshold))
             {
                 InspectionStatus = InspectionStatus.Normal;
                 if (bottle.cappingCompleted)
@@ -3251,7 +3266,7 @@ namespace ConveyorTwin
             {
                 bottle.status = BottleQualityStatus.Filled;
             }
-            else if (bottle.liquidVolume01 >= passThreshold)
+            else if (bottle.IsFillWithinSpecification(passThreshold))
             {
                 bottle.status = BottleQualityStatus.Capped;
             }

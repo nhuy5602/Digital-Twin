@@ -47,6 +47,7 @@ namespace ConveyorTwin
         public int bottlesOnConveyorCount;
         public int totalPassed;
         public int totalRejected;
+        public int totalOverflowed;
         public int totalRejectEscapes;
         public float angularSpeedRadPerSec;
         public float centrifugalAccelerationMps2;
@@ -63,7 +64,8 @@ namespace ConveyorTwin
         FastDiscIndex,
         SlowDiscIndex,
         ShortDiscDwell,
-        LongDiscDwell
+        LongDiscDwell,
+        OverflowPumpTest
     }
 
     public static class TwinProcessMath
@@ -100,6 +102,11 @@ namespace ConveyorTwin
         {
             var requestedLiters = UnityEngine.Mathf.Max(0f, pumpFlowLitersPerMinute) / 60f * UnityEngine.Mathf.Max(0f, frameSeconds);
             return UnityEngine.Mathf.Min(UnityEngine.Mathf.Max(0f, vesselLevelLiters), requestedLiters);
+        }
+
+        public static bool IsFillWithinSpecification(float fillRatio, float passThreshold)
+        {
+            return fillRatio >= UnityEngine.Mathf.Clamp01(passThreshold) && fillRatio <= 1f;
         }
     }
 }

@@ -1,74 +1,186 @@
-# Digital Model: Filling & Filtering Line
+# Digital Twin — Filling, Capping & Quality Line
 
-Mô hình Unity cho dây chuyền chai thủy tinh: cấp chai bằng mâm quay, dẫn vào star wheel, chiết rót, đóng nắp, kiểm tra QC, tách lane và đóng six-pack. Đây là Digital Model: mọi trạng thái vận hành được mô phỏng trong Unity, chưa kết nối PLC hoặc telemetry thực.
+Mô phỏng Unity cho dây chuyền chai: cấp chai từ mâm xoay, đưa vào Scalloped Star Wheel Disc, rót nước, đóng nắp, kiểm tra chất lượng, loại chai lỗi và đóng six-pack.
 
-## Chạy demo
+Đây là **digital twin mô phỏng**. HUD và web dashboard chỉ điều khiển trạng thái mô phỏng trên máy cục bộ; không có kết nối PLC, thiết bị thật hoặc telemetry sản xuất.
 
-Yêu cầu Unity 6000.5.0f1.
+## Chạy nhanh
 
-1. Mở `Assets/Scenes/SampleScene.unity`.
-2. Chạy Play Mode.
-3. Khi cần dựng lại toàn bộ demo, dùng **Tools > Conveyor Twin > Build Demo Scene**. Lệnh này tạo lại phần scene sinh tự động và lưu đè `SampleScene.unity`.
+Yêu cầu: **Unity 6000.5.0f1**.
 
-## Luồng chai
+1. Mở [Assets/Scenes/SampleScene.unity](Assets/Scenes/SampleScene.unity).
+2. Bấm Play.
+3. HUD xuất hiện ở góc trên trái. Có thể chỉnh slider trực tiếp; giá trị được áp dụng ngay khi kéo.
+4. Để dựng lại toàn bộ phần scene sinh tự động, dùng **Tools > Conveyor Twin > Build Demo Scene**.
 
-```text
-Bottle Dropper
-  -> Infeed Turntable (bên trái lane A, Y rotation giảm)
-  -> Infeed Turntable Outlet Forming Guide
-  -> Infeed Bottle Guide Rail Left + Right
-  -> 10-pocket Filling Star Wheel
-  -> QC -> Reject hoặc A/B splitter -> six-pack carton
-```
+Web dashboard chạy trên máy cục bộ tại [http://127.0.0.1:8088/](http://127.0.0.1:8088/) khi Play Mode đang chạy. Có thể mở bằng nút **Open web dashboard** trong HUD.
 
-- Tâm mâm đặt tại `X=-1.40`, `Z=-3.35`; cửa ra giữ ở phía phải (`+X`).
-- Băng chuyền lane A được kéo dài đến `Z=-4.45`.
-- Nẹp cố định trong vùng cửa ra giới hạn chai trên mâm và cho phép từng chai chuyển vào đường dẫn.
-- Hai rail cố định gồm đoạn nhập từ cửa mâm và đoạn chạy theo `+Z`; mỗi đoạn có chân và đế xuống nền.
-- Chai hạ dần từ cao độ mặt mâm xuống cao độ belt trên đoạn nhập, sau đó di chuyển theo tốc độ conveyor và được giữ khoảng cách trên toàn guide path.
-- Chai đầu hàng, ở cuối guide path, được đưa vào pocket 0 hiện có của star wheel.
+## Luồng công nghệ
 
-## Logic infeed
+    Bottle Dropper
+      -> Infeed Turntable + buffer
+      -> Transfer plate + guide rails
+      -> 10-pocket Scalloped Star Wheel Disc
+         -> index -> dwell/fill -> cap -> index
+      -> QC sensor beam
+      -> Reject Sweep Bar -> reject tray
+         hoặc -> A/B splitter -> six-pack carton
 
-`InfeedBottleState` biểu diễn riêng trạng thái vị trí của chai:
+Star Wheel là điểm điều phối chính:
 
-```text
-DroppingToTurntable -> OnTurntable -> TransitioningToInfeedGuide
--> OnInfeedGuide -> OnStarWheel
-```
+- Disc có 10 pocket và index 3 pocket cho mỗi bước làm việc.
+- Cụm rót có 3 nozzle; chỉ rót khi Disc đã dừng và các filling pocket có chai.
+- Tightener chỉ hạ/xoắn/nâng khi Disc dừng, tại các capping pocket có chai.
+- Sau khi dwell tối thiểu hoàn tất và Tightener đã về trạng thái an toàn, Disc mới index tiếp.
 
-`Infeed Turntable Outlet Forming Guide` cung cấp collider cho quá trình bắt chai. Sau khi buffer đạt ngưỡng và còn đủ chỗ trên guide path, chai được nội suy sang điểm đầu trong `0.14 s`. Từ đó, tiến độ theo chiều dài guide path là nguồn chân lý để:
+Conveyor vẫn chạy để vận chuyển chai ngoài Star Wheel. Khi Disc đang rót hoặc đóng nắp, chai trong pocket được giữ tại station; tốc độ conveyor không rút ngắn dwell rót.
 
-- hạ chai từ cao độ mâm xuống băng chuyền;
-- giới hạn khoảng cách giữa các chai;
-- xác định chai đầu hàng đủ gần pocket 0.
+## Các setpoint vận hành
 
-Không có Air Blower, Air Jet hoặc Infeed Neck Support Rail trong scene hay runtime configuration.
+| Setpoint | Phạm vi | Mặc định | Tác động chính |
+| --- | ---: | ---: | --- |
+| Conveyor | 0.20–2.50 m/s | 0.85 m/s | Chuyển chai, năng suất và khả năng chai lỗi lọt qua Reject Sweep Bar. Không làm đổi dwell rót. |
+| Pump flow | 0–300 L/min | 133.33 L/min | Lượng nước cấp trong dwell; quá thấp gây thiếu nước, quá cao gây trào. |
+| Infeed turntable | 5–60 rpm | 18 rpm | Nhịp giải phóng chai từ buffer vào guide; có giới hạn bởi khoảng cách an toàn trên line. |
+| Disc index speed | 1–30 rpm | 6.67 rpm | Tốc độ quay của Disc trong pha index và thời gian index giữa các station. |
+| Disc dwell | 0.10–5.00 s | 1.35 s | Thời gian Disc đứng yên tối thiểu ở station; đây là cửa sổ rót nước. |
 
-## Star wheel
+Thời gian index được tính theo số pocket cần đi:
 
-Star wheel giữ nguyên 10 pocket, vị trí pocket 0, cơ chế index, batch rót ba chai, cấp nắp và xả chai. Thay đổi infeed chỉ thay điểm/điều kiện đưa chai vào pocket 0; không thay đổi hình học hay logic vận hành của wheel.
+    index duration = (số pocket dịch chuyển / tổng số pocket) × 60 / Disc RPM
 
-## Thành phần chính
+Ví dụ: index 1 pocket ở 6.67 rpm trên Disc 10 pocket mất xấp xỉ 0.90 s. Dwell là thông số độc lập: thay Conveyor không làm thay đổi Disc dwell.
 
-- `Assets/Scripts/ConveyorDemoRuntimeBootstrap.cs`: dựng scene, mâm, conveyor, nẹp cửa ra và hai infeed guide rail.
-- `Assets/Scripts/FillingFilteringDigitalTwin.cs`: trạng thái chai, guide path, star wheel, filling, capping, QC và packing.
-- `Assets/Scripts/BottleProcessState.cs`: trạng thái công nghệ và infeed của chai.
-- `Assets/Editor/ConveyorDemoSceneBuilder.cs`: menu dựng lại scene.
+## Mô hình rót nước và QC
 
-Tài liệu chi tiết về bàn giao infeed và star wheel có tại [docs/scalloped-star-wheel-logic.md](docs/scalloped-star-wheel-logic.md); bản tóm tắt báo cáo có tại [docs/bao-cao-ngan.md](docs/bao-cao-ngan.md).
-# Infeed rail alignment update
+Mỗi chai có dung tích danh định 1 L. Trong toàn bộ dwell:
 
-- `Infeed Bottle Guide Rail Left Segment 3` is the lateral datum. The bottle centre follows its inside face, then uses a short sampled curve to reach pocket 0.
-- `Infeed Bottle Guide Rail Right Segment 3` has no floor support. Its inside clearance is calculated from the shared bottle-body diameter, so the two rails remain exactly bottle-width apart.
-- `Infeed Turntable Diagonal Bottle Deflector` is a fixed diagonal collider on the turntable; it channels bottles toward the existing outlet forming guide without changing the Star Wheel.
+1. Van/nozzle tiếp tục mở với mọi chai đang ở filling pocket, kể cả chai đã đạt 100%.
+2. Lưu lượng bơm khả dụng được giới hạn bởi lượng còn lại trong bồn.
+3. Lưu lượng được chia đều giữa các chai đang rót.
+4. Lượng nước thực tế được giữ nguyên, không clamp ở 100%.
 
-## Level transfer update
+Điều kiện pass cố định:
 
-- The infeed turntable top and conveyor slats are level. `Infeed Turntable Conveyor Transfer Plate` replaces the former outlet forming guide and is the simulation handoff surface.
-- The visible slat-chain animation no longer pauses with the splitter safety state.
-- The Scalloped Star Wheel Disc and fixed barrier are lowered by `0.288m`; each scallop radius equals the bottle-body radius (`0.07m`).
+    95% <= lượng nước thực tế <= 100%
 
-## Inspector tuning
+| Kết quả | Điều kiện | Hệ quả |
+| --- | --- | --- |
+| Pass | 95–100% | Chai qua QC, đi tới splitter/đóng gói. |
+| Underfill | <95% | Chai bị QC đánh dấu reject. |
+| Overflow | >100% | Chai bị QC đánh dấu reject. |
 
-Select `Filling Filtering Demo Bootstrap` and use **Infeed tail curve tuning** to change the start, shape, and segment count of the Left/Right End Curve 6. Use **Star wheel continuous barrier tuning** to change `starWheelBarrierOpeningDegrees` (the open gap) and `starWheelBarrierEntryLeadDegrees` (the gap position), then invoke **Rebuild Filling & Filtering Demo**.
+Overflow không chặn Tightener: chai vẫn được đóng nắp theo chu trình cơ khí, sau đó QC mới phân loại. Khi overflow, lớp nước xanh sáng phủ bên ngoài cả **Bottle Body** và **Bottle Neck**; hai lớp này không có collider và tự tắt khi chai reset.
+
+Ví dụ với 3 nozzle, dwell 1.35 s và bồn còn đủ nước:
+
+    133.33 L/min -> 1.00 L/chai  -> nominal pass
+    300.00 L/min -> 2.25 L/chai  -> overflow reject
+
+Nếu KPI **Vessel** là 0 / 150 L, các chai mới không thể nhận thêm nước. Bấm **Reset** để nạp lại bồn; reset giữ setpoint hiện tại, nên có thể giữ Pump flow cao để quan sát overflow ngay từ đầu.
+
+## Reject Sweep Bar thực tế
+
+Reject không teleport hay đứng chờ thanh gạt:
+
+- Khi một chai lỗi đi tới reject station, Sweep Bar bắt đầu một chu trình đi ra và thu về.
+- Chai vẫn chạy cùng conveyor trong thời gian đó.
+- Trong từng frame của cả hành trình ra và về, hệ thống kiểm tra bounds thực tế của thanh gạt cộng bán kính chai.
+- Mọi chai va vào vùng quét đều bị lấy khỏi line và đưa vào reject tray — gồm cả chai lỗi lẫn chai đạt.
+- Nếu reject tray đầy giữa một lượt quét, tray xả trước rồi tiếp tục nhận tất cả chai đã va chạm.
+- Chai lỗi đi qua hết vùng quét mà không bị chạm tiếp tục tới outfeed và chỉ được ghi một lần vào TotalRejectEscapes; nó không được tính pass hay reject đã loại.
+
+Vì vậy Conveyor nhanh làm tăng khả năng reject escape hoặc loại nhầm, nhưng không trực tiếp làm chai rót thiếu nước.
+
+## Dashboard và KPI
+
+HUD Unity và dashboard web dùng chung snapshot TwinSnapshot.
+
+Các KPI quan trọng:
+
+- Throughput, Average fill, Last batch và Reject rate.
+- Mức bồn, số chai trong turntable buffer và trên line.
+- Pass, Reject, Overflow và Reject escapes.
+- Disc RPM, dwell, thời gian index/pocket và phase hiện tại của Star Wheel.
+- Tốc độ góc và gia tốc ly tâm của turntable.
+
+Alert hiện hành có thể báo:
+
+- Overflow detected
+- Low vessel level
+- Reject escape detected
+- High reject rate
+- Turntable buffer near full
+- Underfill detected
+
+## Experiment presets
+
+Mỗi preset bắt đầu từ bộ setpoint mặc định, không cộng dồn với preset trước đó.
+
+| Preset | Thiết lập thử nghiệm |
+| --- | --- |
+| Nominal | Trở về bộ mặc định. |
+| High conveyor | Tăng Conveyor lên 1.65 lần để quan sát reject escape/va chạm thực tế. |
+| Low pump flow | Giảm Pump flow còn 55% để tạo underfill. |
+| High infeed RPM | Tăng infeed RPM lên 1.65 lần. |
+| Fast Disc index | Disc index speed = 30 rpm. |
+| Slow Disc index | Disc index speed = 2 rpm. |
+| Short Disc dwell | Disc dwell = 0.35 s. |
+| Long Disc dwell | Disc dwell = 3.50 s. |
+| Overflow pump test | Pump flow = 300 L/min, giữ dwell mặc định để tạo overflow rõ ràng. |
+
+Preset chỉ đổi setpoint. Nếu muốn làm lại một thử nghiệm với bồn đầy và bộ đếm mới, chọn preset rồi bấm **Reset**. Nút **New seed + reset** thay seed ngẫu nhiên cho lần chạy mô phỏng tiếp theo.
+
+## Hành vi chất lượng cần lưu ý
+
+- Pump flow, lượng bồn và Disc dwell là ba biến quyết định trực tiếp lượng nước/chất lượng rót.
+- Conveyor speed không nằm trong công thức lượng nước rót.
+- Disc index speed làm thay đổi thời gian di chuyển và năng suất chu trình, nhưng không thay đổi khoảng dwell đã cấu hình.
+- Average fill có thể vượt 100% vì đây là lượng nước thực tế trước khi QC loại chai overflow.
+- Reject rate chỉ tính chai đã được phân loại pass/reject; reject escape có KPI riêng.
+
+## Dựng scene và tinh chỉnh hình học
+
+Chọn object **Filling Filtering Demo Bootstrap** trong Inspector để tinh chỉnh các tham số dựng scene, sau đó gọi **Rebuild Filling & Filtering Demo** hoặc menu **Tools > Conveyor Twin > Build Demo Scene**.
+
+| Nhóm | Tham số | Tác dụng |
+| --- | --- | --- |
+| Bottle | Bottle height scale | Scale chiều cao chai trong khoảng kiểm chứng 0.80–1.00, giữ đáy chai trên bề mặt đỡ. |
+| Infeed tail curve | Start Z, start tangent, end control offset, segments | Điều chỉnh đoạn cong cuối của cặp rail, từ transfer path tới pocket vào Star Wheel. |
+| Star Wheel barrier | Entry lead, opening degrees, segments | Điều chỉnh vị trí/khe mở và độ mịn của barrier bao quanh Disc. |
+
+Lệnh Build Demo Scene dựng lại phần scene sinh tự động và lưu vào SampleScene.unity.
+
+## Kiến trúc mã nguồn
+
+| Tệp | Vai trò |
+| --- | --- |
+| [Assets/Scripts/ConveyorDemoRuntimeBootstrap.cs](Assets/Scripts/ConveyorDemoRuntimeBootstrap.cs) | Dựng các mesh/station, chai, nozzle, Disc, reject tray, HUD và web dashboard. |
+| [Assets/Scripts/FillingFilteringDigitalTwin.cs](Assets/Scripts/FillingFilteringDigitalTwin.cs) | Logic infeed, index/dwell, rót, capping, QC, reject sweep, splitter và đóng gói. |
+| [Assets/Scripts/BottleProcessState.cs](Assets/Scripts/BottleProcessState.cs) | Trạng thái từng chai, lượng nước thực, overflow và hiệu ứng nước ngoài thân/cổ chai. |
+| [Assets/Scripts/TwinDashboardData.cs](Assets/Scripts/TwinDashboardData.cs) | Setpoint, snapshot, preset và các hàm toán học thuần. |
+| [Assets/Scripts/FillingFilteringHud.cs](Assets/Scripts/FillingFilteringHud.cs) | HUD điều khiển và KPI trong Unity. |
+| [Assets/Scripts/TwinDashboardWebServer.cs](Assets/Scripts/TwinDashboardWebServer.cs) | WebSocket/web dashboard cục bộ trên port 8088. |
+| [Assets/Editor/ConveyorDemoSceneBuilder.cs](Assets/Editor/ConveyorDemoSceneBuilder.cs) | Menu dựng lại demo scene. |
+| [Assets/Editor/TwinProcessMathTests.cs](Assets/Editor/TwinProcessMathTests.cs) | Test toán học cho dwell, RPM/index, bơm, fill specification và reject sweep. |
+
+## Kiểm thử
+
+Test Editor gồm các quan hệ chính:
+
+- Dwell độc lập với conveyor speed.
+- RPM quyết định thời gian index.
+- Lượng bơm bị giới hạn đúng bởi lượng còn trong bồn.
+- Pump thấp không đạt lượng danh định trong dwell.
+- 95% và 100% pass; dưới 95% hoặc vượt 100% fail.
+- Pump 300 L/min trong dwell mặc định có thể tạo overflow.
+- Vùng quét Reject Sweep Bar và reject escape được tính theo bounds vật lý.
+
+Chạy test trong Unity qua **Window > General > Test Runner > EditMode**.
+
+## Tài liệu bổ sung
+
+- [docs/scalloped-star-wheel-logic.md](docs/scalloped-star-wheel-logic.md): ghi chú hình học và handoff infeed/Star Wheel.
+- [docs/bao-cao-ngan.md](docs/bao-cao-ngan.md): báo cáo tóm tắt.
+
+README này là mô tả vận hành hiện tại của digital twin; các tài liệu bổ sung có thể tập trung vào các đợt chỉnh hình học cũ hơn.

@@ -42,6 +42,26 @@ public class TwinProcessMathTests
     }
 
     [Test]
+    public void FillSpecificationPassesOnlyFromNinetyFiveToOneHundredPercent()
+    {
+        Assert.That(TwinProcessMath.IsFillWithinSpecification(0.95f, 0.95f), Is.True);
+        Assert.That(TwinProcessMath.IsFillWithinSpecification(1f, 0.95f), Is.True);
+        Assert.That(TwinProcessMath.IsFillWithinSpecification(1.01f, 0.95f), Is.False);
+        Assert.That(TwinProcessMath.IsFillWithinSpecification(0.94f, 0.95f), Is.False);
+    }
+
+    [Test]
+    public void HighPumpOutputCanOverflowBottlesDuringTheSameDwell()
+    {
+        var dwell = TwinProcessMath.CalculateDiscDwellSeconds(1.35f);
+        var totalDispensed = TwinProcessMath.CalculateAvailablePumpOutputLiters(300f, dwell, 120f);
+        var perBottle = totalDispensed / 3f;
+
+        Assert.That(perBottle, Is.GreaterThan(1f));
+        Assert.That(perBottle, Is.EqualTo(2.25f).Within(0.001f));
+    }
+
+    [Test]
     public void SweepBoundsCaptureBottleDuringEitherBarStroke()
     {
         var barBounds = new Bounds(new Vector3(0f, 0.78f, 1.15f), new Vector3(0.07f, 0.30f, 0.42f));
