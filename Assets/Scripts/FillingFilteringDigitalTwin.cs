@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace ConveyorTwin
 {
@@ -146,6 +147,10 @@ namespace ConveyorTwin
         public int maxTurntableBuffer = 16;
         public int releaseThreshold = 7;
         public float releaseIntervalSeconds = 0.65f;
+        [Tooltip("When enabled, the infeed RPM changes the bottle release interval while respecting conveyor spacing.")]
+        public bool linkInfeedRpmToRelease = true;
+        public float referenceInfeedMotorSpeedRpm = 18f;
+        public float referenceReleaseIntervalSeconds = 0.62f;
         public float turntableSurfaceGrip = 3.5f;
         public float turntableVelocityDamping = 0.96f;
         public float turntableBottleRadius = 0.11f;
@@ -183,11 +188,17 @@ namespace ConveyorTwin
         [Header("Process settings")]
         [Range(0f, 1f)] public float properFillProbability = 0.9f;
         [Range(0f, 1f)] public float passThreshold = 0.95f;
+        [Tooltip("Filling dwell time. Pump flow, rather than this value, controls the amount dispensed.")]
         public float fillingTimeSeconds = 1.35f;
+        [Tooltip("Reference conveyor speed used to scale the time a bottle stays under the filling nozzles.")]
+        public float referenceConveyorSpeedMps = 0.85f;
+        [Min(0f)] public float pumpFlowLitersPerMinute;
         public float bottleCapacityLiters = 1f;
         public float initialVesselLevelLiters = 120f;
         public float vesselCapacityLiters = 150f;
         public float infeedMotorSpeedRpm = 18f;
+        [Header("Repeatable experiments")]
+        public int randomSeed = 12345;
 
         public float ThroughputBottlesPerHour { get; private set; }
         public float InfeedMotorSpeedRpm => infeedMotorSpeedRpm;
@@ -202,6 +213,31 @@ namespace ConveyorTwin
         public int BottlesOnConveyorCount { get; private set; }
         public float TurntableAngularSpeedRadPerSec { get; private set; }
         public float CentrifugalAccelerationAtRimMps2 { get; private set; }
+        public float AverageFillPercent => completedFillSamples > 0 ? completedFillRatioTotal / completedFillSamples * 100f : 0f;
+        public float LastBatchFillPercent { get; private set; }
+        public float RejectRatePercent => TotalPassed + TotalRejected > 0
+            ? TotalRejected * 100f / (TotalPassed + TotalRejected)
+            : 0f;
+        public bool SimulationPaused { get; private set; }
+        public float EffectiveReleaseIntervalSeconds
+        {
+            get
+            {
+                var safeInterval = minimumBottleSpacingM / Mathf.Max(0.05f, ConveyorEffectiveSpeedMps);
+                if (!linkInfeedRpmToRelease)
+                {
+                    return Mathf.Max(safeInterval, releaseIntervalSeconds);
+                }
+
+                var referenceRpm = Mathf.Max(0.1f, referenceInfeedMotorSpeedRpm);
+                var rpmScaledInterval = referenceReleaseIntervalSeconds * referenceRpm / Mathf.Max(0.1f, infeedMotorSpeedRpm);
+                return Mathf.Max(safeInterval, rpmScaledInterval);
+            }
+        }
+        public float EffectiveFillingDwellSeconds => TwinProcessMath.CalculateFillingDwellSeconds(
+            fillingTimeSeconds,
+            referenceConveyorSpeedMps,
+            conveyorSpeedMps);
         public bool ConveyorStoppedForFilling { get; private set; }
         public bool TurntablePaused { get; private set; }
         public bool StarWheelLocked { get; private set; }
@@ -282,11 +318,20 @@ namespace ConveyorTwin
         private bool initializedTurntable;
         private int starWheelIndex;
         private int capMagazineVisibleCount;
+        private float completedFillRatioTotal;
+        private int completedFillSamples;
+        private TwinSetpoints defaultSetpoints;
+        private bool defaultsCaptured;
+
+        private static TwinSetpoints pendingResetSetpoints;
+        private static int? pendingResetSeed;
 
         private float MaxTurntableBottleCenterRadius => Mathf.Max(0.05f, turntableRadius - turntableBottleRadius);
+        private float QcSensorTriggerZ => qcSensorBeam != null ? qcSensorBeam.position.z : qcZ;
 
         private void Awake()
         {
+            Time.timeScale = 1f;
             LiquidLevelLiters = initialVesselLevelLiters;
             foreach (var bottle in bottles)
             {
@@ -299,6 +344,7 @@ namespace ConveyorTwin
 
         private void Start()
         {
+            InitializeDigitalTwinDefaults();
             SetFillingFlowVisuals(GetActiveFillingNozzles(), false);
             capMagazineVisibleCount = Mathf.Clamp(capMagazineCapacity, 1, Mathf.Max(1, capMagazineCaps.Count));
             UpdateCapMagazineVisuals();
@@ -328,6 +374,113 @@ namespace ConveyorTwin
             StarWheelLocked = fillingStationBusy || fillingCaptureBusy || StarWheelIndexing || cappingStationBusy;
             StarWheelPhase = DetermineStarWheelPhase();
             CappingActive = cappingStationBusy;
+        }
+
+        public TwinSetpoints GetSetpoints()
+        {
+            return new TwinSetpoints
+            {
+                conveyorSpeedMps = conveyorSpeedMps,
+                pumpFlowLitersPerMinute = pumpFlowLitersPerMinute,
+                infeedMotorSpeedRpm = infeedMotorSpeedRpm
+            };
+        }
+
+        public void ApplySetpoints(TwinSetpoints setpoints)
+        {
+            if (setpoints == null)
+            {
+                return;
+            }
+
+            conveyorSpeedMps = Mathf.Clamp(setpoints.conveyorSpeedMps, 0.2f, 2.5f);
+            pumpFlowLitersPerMinute = Mathf.Clamp(setpoints.pumpFlowLitersPerMinute, 0f, 300f);
+            infeedMotorSpeedRpm = Mathf.Clamp(setpoints.infeedMotorSpeedRpm, 5f, 60f);
+        }
+
+        public void ApplyPreset(TwinScenarioPreset preset)
+        {
+            if (!defaultsCaptured)
+            {
+                return;
+            }
+
+            var settings = defaultSetpoints.Clone();
+            switch (preset)
+            {
+                case TwinScenarioPreset.HighConveyor:
+                    settings.conveyorSpeedMps = Mathf.Min(2.5f, settings.conveyorSpeedMps * 1.65f);
+                    break;
+                case TwinScenarioPreset.LowPumpFlow:
+                    settings.pumpFlowLitersPerMinute *= 0.55f;
+                    break;
+                case TwinScenarioPreset.HighInfeedRpm:
+                    settings.infeedMotorSpeedRpm = Mathf.Min(60f, settings.infeedMotorSpeedRpm * 1.65f);
+                    break;
+            }
+
+            ApplySetpoints(settings);
+        }
+
+        public void SetSimulationPaused(bool paused)
+        {
+            SimulationPaused = paused;
+            Time.timeScale = paused ? 0f : 1f;
+        }
+
+        public void ResetSimulation(bool useNewSeed)
+        {
+            pendingResetSetpoints = GetSetpoints();
+            pendingResetSeed = useNewSeed ? randomSeed + 1 : randomSeed;
+            Time.timeScale = 1f;
+            var activeScene = SceneManager.GetActiveScene();
+            SceneManager.LoadScene(activeScene.buildIndex);
+        }
+
+        public TwinSnapshot CreateSnapshot()
+        {
+            var alert = "Normal";
+            if (LiquidLevelLiters <= bottleCapacityLiters * ActiveFillingNozzleCount)
+            {
+                alert = "Low vessel level";
+            }
+            else if (RejectRatePercent >= 10f)
+            {
+                alert = "High reject rate";
+            }
+            else if (TurntableBufferCount >= Mathf.Max(1, maxTurntableBuffer - 1))
+            {
+                alert = "Turntable buffer near full";
+            }
+            else if (LastBatchFillPercent > 0f && LastBatchFillPercent < passThreshold * 100f)
+            {
+                alert = "Underfill detected";
+            }
+
+            return new TwinSnapshot
+            {
+                simulationSeconds = Time.time,
+                paused = SimulationPaused,
+                conveyorSpeedMps = conveyorSpeedMps,
+                pumpFlowLitersPerMinute = pumpFlowLitersPerMinute,
+                infeedMotorSpeedRpm = infeedMotorSpeedRpm,
+                effectiveReleaseIntervalSeconds = EffectiveReleaseIntervalSeconds,
+                effectiveFillingDwellSeconds = EffectiveFillingDwellSeconds,
+                throughputBottlesPerHour = ThroughputBottlesPerHour,
+                averageFillPercent = AverageFillPercent,
+                lastBatchFillPercent = LastBatchFillPercent,
+                rejectRatePercent = RejectRatePercent,
+                vesselLevelLiters = LiquidLevelLiters,
+                vesselCapacityLiters = vesselCapacityLiters,
+                turntableBufferCount = TurntableBufferCount,
+                bottlesOnConveyorCount = BottlesOnConveyorCount,
+                totalPassed = TotalPassed,
+                totalRejected = TotalRejected,
+                angularSpeedRadPerSec = TurntableAngularSpeedRadPerSec,
+                centrifugalAccelerationMps2 = CentrifugalAccelerationAtRimMps2,
+                starWheelPhase = StarWheelPhase,
+                alert = alert
+            };
         }
 
         private void AnimateMachines()
@@ -435,7 +588,7 @@ namespace ConveyorTwin
 
             TurntableBufferCount = turntableBottles.Count;
             spawnTimer = 0f;
-            releaseTimer = releaseIntervalSeconds;
+            releaseTimer = EffectiveReleaseIntervalSeconds;
         }
 
         private void UpdateTurntableBuffer()
@@ -614,7 +767,7 @@ namespace ConveyorTwin
                 return false;
             }
 
-            if (IsConveyorStopped() || releaseTimer < releaseIntervalSeconds || turntableBottles.Count < releaseThreshold || !HasInfeedGuidePath)
+            if (IsConveyorStopped() || releaseTimer < EffectiveReleaseIntervalSeconds || turntableBottles.Count < releaseThreshold || !HasInfeedGuidePath)
             {
                 return false;
             }
@@ -1001,11 +1154,6 @@ namespace ConveyorTwin
                     }
                 }
 
-                if (bottle.fillingCompleted && !bottle.inspectionCompleted && position.z >= qcZ)
-                {
-                    InspectBottle(bottle);
-                }
-
                 if (bottle.status == BottleQualityStatus.Rejected && position.z >= rejectStationZ)
                 {
                     StartCoroutine(SweepRejectedBottleToTray(bottle));
@@ -1053,6 +1201,13 @@ namespace ConveyorTwin
                     position.x = ResolveLaneX(assignedLane, position.z);
                 }
                 bottle.transform.position = position;
+
+                // Keep the bottle neutral through filling and capping. Its pass/fail colour appears only
+                // when its centre has just reached the physical QC beam, not at a separate fixed Z value.
+                if (bottle.fillingCompleted && !bottle.inspectionCompleted && position.z >= QcSensorTriggerZ)
+                {
+                    InspectBottle(bottle);
+                }
             }
         }
 
@@ -1444,7 +1599,7 @@ namespace ConveyorTwin
 
             var fillingTimeout = Mathf.Max(
                 starWheelLockRecoverySeconds,
-                fillingTimeSeconds +
+                EffectiveFillingDwellSeconds +
                 fillingNozzleMoveSeconds * 2f +
                 StarWheelIndexDurationForSlots(StarWheelIndexStepPockets) * 2f +
                 StarWheelIndexDurationForSlots(1) * StarWheelIndexStepPockets +
@@ -1708,8 +1863,9 @@ namespace ConveyorTwin
                 bottle.status = BottleQualityStatus.Filling;
                 SnapBottleToFillingSlot(bottle);
 
+                // Random quality remains an independent process defect. Pump flow below the required rate
+                // creates an additional, physical underfill because the target cannot be reached in time.
                 var targetVolume = Random.value <= properFillProbability ? 1f : Random.Range(0.5f, 0.6f);
-                bottle.isDefective = targetVolume < passThreshold;
                 targets[bottle] = targetVolume;
             }
 
@@ -1717,40 +1873,73 @@ namespace ConveyorTwin
             SetFillingFlowVisuals(activeNozzles, true);
 
             var elapsed = 0f;
-            var previousRatio = 0f;
-            while (elapsed < fillingTimeSeconds)
+            var dwellSeconds = EffectiveFillingDwellSeconds;
+            while (elapsed < dwellSeconds)
             {
-                elapsed += Time.deltaTime;
-                var ratio = Mathf.Clamp01(elapsed / fillingTimeSeconds);
-                var frameFilledVolume = 0f;
+                var frameDuration = Mathf.Min(Time.deltaTime, dwellSeconds - elapsed);
+                elapsed += frameDuration;
+                var activeBottleCount = 0;
                 foreach (var bottle in batch)
                 {
-                    if (bottle != null && targets.TryGetValue(bottle, out var targetVolume))
+                    if (bottle != null && targets.TryGetValue(bottle, out var targetVolume) && bottle.liquidVolume01 < targetVolume)
                     {
-                        SnapBottleToFillingSlot(bottle);
-                        bottle.SetVolume(Mathf.Lerp(0f, targetVolume, ratio));
-                        frameFilledVolume += Mathf.Max(0f, ratio - previousRatio) * targetVolume;
+                        activeBottleCount++;
                     }
                 }
 
-                LiquidLevelLiters = Mathf.Max(0f, LiquidLevelLiters - frameFilledVolume * bottleCapacityLiters);
-                previousRatio = ratio;
+                if (activeBottleCount > 0 && LiquidLevelLiters > 0f)
+                {
+                    var availableLiters = TwinProcessMath.CalculateAvailablePumpOutputLiters(
+                        pumpFlowLitersPerMinute,
+                        frameDuration,
+                        LiquidLevelLiters);
+                    var litersPerBottle = availableLiters / activeBottleCount;
+                    var dispensedLiters = 0f;
+
+                    foreach (var bottle in batch)
+                    {
+                        if (bottle == null || !targets.TryGetValue(bottle, out var targetVolume) || bottle.liquidVolume01 >= targetVolume)
+                        {
+                            continue;
+                        }
+
+                        SnapBottleToFillingSlot(bottle);
+                        var remainingLiters = Mathf.Max(0f, targetVolume - bottle.liquidVolume01) * bottleCapacityLiters;
+                        var bottleLiters = Mathf.Min(litersPerBottle, remainingLiters);
+                        bottle.SetVolume(bottle.liquidVolume01 + bottleLiters / Mathf.Max(0.0001f, bottleCapacityLiters));
+                        dispensedLiters += bottleLiters;
+                    }
+
+                    LiquidLevelLiters = Mathf.Max(0f, LiquidLevelLiters - dispensedLiters);
+                }
                 yield return null;
             }
 
+            var batchFillTotal = 0f;
+            var batchFillCount = 0;
             foreach (var bottle in batch)
             {
-                if (bottle == null || !targets.TryGetValue(bottle, out var targetVolume))
+                if (bottle == null || !targets.ContainsKey(bottle))
                 {
                     continue;
                 }
 
-                bottle.SetVolume(targetVolume);
+                bottle.isDefective = bottle.liquidVolume01 < passThreshold;
                 bottle.status = BottleQualityStatus.Filled;
                 bottle.fillingCompleted = true;
+                batchFillTotal += bottle.liquidVolume01;
+                batchFillCount++;
             }
 
-            LastFillingTimeSeconds = fillingTimeSeconds;
+            if (batchFillCount > 0)
+            {
+                var batchAverage = batchFillTotal / batchFillCount;
+                LastBatchFillPercent = batchAverage * 100f;
+                completedFillRatioTotal += batchFillTotal;
+                completedFillSamples += batchFillCount;
+            }
+
+            LastFillingTimeSeconds = elapsed;
             SetFillingFlowVisuals(activeNozzles, false);
             yield return MoveFillingNozzles(activeSprings, springDownPositions, springBasePositions, fillingNozzleMoveSeconds, batch);
             yield return AdvanceStarWheelAfterFilling();
@@ -1982,6 +2171,37 @@ namespace ConveyorTwin
 
             yield return SlideMagazineCapsToRestingPositions();
             UpdateCapMagazineVisuals();
+        }
+
+        private void InitializeDigitalTwinDefaults()
+        {
+            // The default flow preserves the old behaviour: a full batch fills one bottle per nozzle in one dwell.
+            if (pumpFlowLitersPerMinute <= 0f)
+            {
+                pumpFlowLitersPerMinute = ActiveFillingNozzleCount * bottleCapacityLiters * 60f / Mathf.Max(0.05f, fillingTimeSeconds);
+            }
+
+            if (referenceReleaseIntervalSeconds <= 0f)
+            {
+                referenceReleaseIntervalSeconds = releaseIntervalSeconds;
+            }
+
+            defaultSetpoints = GetSetpoints();
+            defaultsCaptured = true;
+
+            if (pendingResetSeed.HasValue)
+            {
+                randomSeed = pendingResetSeed.Value;
+                pendingResetSeed = null;
+            }
+
+            if (pendingResetSetpoints != null)
+            {
+                ApplySetpoints(pendingResetSetpoints);
+                pendingResetSetpoints = null;
+            }
+
+            Random.InitState(randomSeed);
         }
 
         private void UpdateCapMagazineVisuals()

@@ -254,7 +254,7 @@ namespace ConveyorTwin
             process.fillingNozzleCount = 3;
             process.fillingFirstZ = FillingFirstZ;
             process.fillingQueueStopZ = -1.34f;
-            process.qcZ = 0.65f;
+            process.qcZ = qcBeam != null ? qcBeam.position.z : 0.65f;
             process.rejectStationZ = 1.15f;
             process.cappingZ = CappingFirstZ;
             process.cappingHeadCount = 3;
@@ -291,6 +291,8 @@ namespace ConveyorTwin
             process.starWheelContinuousSpeedRpm = 7.5f;
             process.infeedMotorSpeedRpm = 18f;
             process.fillingTimeSeconds = 1.35f;
+            process.referenceConveyorSpeedMps = process.conveyorSpeedMps;
+            process.pumpFlowLitersPerMinute = process.fillingNozzleCount * process.bottleCapacityLiters * 60f / process.fillingTimeSeconds;
             process.properFillProbability = 0.9f;
             process.passThreshold = 0.95f;
             // Keep each bottle base on its supporting surface while the bottle height changes.
@@ -302,6 +304,9 @@ namespace ConveyorTwin
             process.maxTurntableBuffer = 16;
             process.spawnIntervalSeconds = 0.85f;
             process.releaseIntervalSeconds = 0.62f;
+            process.referenceInfeedMotorSpeedRpm = process.infeedMotorSpeedRpm;
+            process.referenceReleaseIntervalSeconds = process.releaseIntervalSeconds;
+            process.linkInfeedRpmToRelease = true;
             process.infeedGuideWheelCaptureDistanceM = 0.08f;
 
             foreach (var conveyorAnimator in root.GetComponentsInChildren<SlatChainConveyorAnimator>())
@@ -1018,7 +1023,11 @@ namespace ConveyorTwin
             var hud = hudObject.AddComponent<FillingFilteringHud>();
             hud.process = process;
             hud.position = new Vector2(16f, 16f);
-            hud.size = new Vector2(620f, 560f);
+            hud.size = new Vector2(700f, 650f);
+
+            var webDashboard = hudObject.AddComponent<TwinDashboardWebServer>();
+            webDashboard.process = process;
+            webDashboard.port = 8088;
         }
 
         private Mesh CreateTaperedCylinderMesh(int segments, float bottomRadius, float topRadius, float height)
