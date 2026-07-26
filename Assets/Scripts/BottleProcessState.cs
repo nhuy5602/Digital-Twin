@@ -21,8 +21,8 @@ namespace ConveyorTwin
         None,
         DroppingToTurntable,
         OnTurntable,
-        TransitioningToNeckRail,
-        OnNeckRail,
+        TransitioningToInfeedGuide,
+        OnInfeedGuide,
         OnStarWheel
     }
 

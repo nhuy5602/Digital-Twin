@@ -1,95 +1,48 @@
 # Báo cáo ngắn: Digital Model dây chuyền Filling & Filtering
 
-Tài liệu này là bản tóm tắt cho báo cáo môn học. Mô tả đầy đủ, thông số runtime và giới hạn kỹ thuật nằm trong [README](../README.md).
+## Mục tiêu
 
-## 1. Mục tiêu
+Mô hình Unity minh họa dây chuyền chai thủy tinh gồm cấp chai bằng mâm quay, dẫn chai vào star wheel, chiết rót, đóng nắp, QC, tách hai lane và đóng carton sáu chai. Đây là Digital Model phục vụ quan sát luồng vật liệu và kiểm thử logic vận hành, chưa kết nối dữ liệu PLC/IIoT thực.
 
-Xây dựng mô hình Unity cho dây chuyền chai nước: cấp chai bằng mâm quay, dẫn chai qua neck support rail, chiết rót, đóng nắp, kiểm tra mức đầy, loại chai lỗi, tách hai lane và đóng carton sáu chai. Mô hình dùng để quan sát luồng vật liệu, thử tham số vận hành và giải thích mối liên hệ giữa mô hình vật lý gần đúng với logic điều khiển.
-
-## 2. Cấp độ Digital Twin
-
-Project hiện là **Digital Model**. Toàn bộ trạng thái chai, tốc độ, mức bồn và kết quả QC được tạo trong Unity. Scene chưa kết nối PLC, sensor thật, IIoT hay CSV vào dây chuyền Filling & Filtering, nên không tuyên bố là Digital Shadow.
-
-Các class telemetry/belt tổng quát trong project là hướng mở rộng. Để thành Digital Shadow, cần đưa dữ liệu thực vào mô hình, đồng bộ thời gian, ánh xạ tag thiết bị, hiệu chuẩn tham số và kiểm chứng độ sai lệch.
-
-## 3. Quy trình mô phỏng
+## Luồng mô phỏng
 
 ```text
-Dropper -> Turntable -> Left Neck Rail + Blower -> Star Wheel
+Dropper -> Turntable -> Outlet Forming Guide -> Conveyor Guide Rails -> Star Wheel
         -> QC -> Reject hoặc A/B splitter -> Six-pack carton
 ```
 
-- Chai rơi xuống mâm với điểm đáp lệch nhẹ theo chiều cấp chai.
-- Mâm quay giữ chai trong buffer. Chai dạt ra ngoài, va chạm với guide rail trái và chỉ vào rail khi còn chỗ trống.
-- Chai chuyển mượt sang rail, được blower đẩy dọc theo `+X`, rồi hạ dần xuống cao độ rail sau khi ra ngoài bán kính mâm.
-- Star wheel 10 pocket bắt chai sát cửa vào. Ba chai được rót đồng thời, sau đó nhận nắp và được siết bằng ba capping head trong star wheel.
-- QC phân loại theo thể tích. Chai lỗi bị pusher loại; chai đạt đi theo chuỗi lane `A,A,A,B,B,B` để tạo lưới `3 x 2` trong carton.
+- Mâm đặt bên trái lane A tại `X=-1.40`, `Z=-3.35`, quay với Y rotation giảm.
+- Cửa ra bên phải có nẹp cố định để gom và định hình chai trước khi bàn giao.
+- Lane A kéo dài tới `Z=-4.45`; cặp rail cố định có chân từ nền dẫn chai từ cửa ra theo `+Z` tới pocket 0.
+- Chai đi theo guide path ở tốc độ conveyor, hạ từ mặt mâm xuống belt ở đoạn nhập và giữ khoảng cách theo tiến độ path.
+- Star wheel 10 pocket vẫn nhận chai ở pocket 0, rót ba chai song song, đóng nắp và xả ra conveyor cho QC.
 
-## 4. Các mô hình vật lý và hiện tượng
+## Mô hình vật lý và giới hạn
 
-### Mâm quay
+Turntable dùng xấp xỉ động học trong mặt phẳng X-Z với lực dạt hướng tâm và lực bám bề mặt. Mô hình không giải va chạm rigidbody đầy đủ, lực khí nén hoặc CFD.
 
-```text
-ω = 2π · rpm / 60
-v = rω
-a_c = rω²
-```
+Hai rail và nẹp cửa ra dùng collider/hình học để thể hiện cơ cấu dẫn chai. Hàng chờ trên guide path được giải bằng spacing xác định; vì vậy mô hình phù hợp để quan sát logic cấp chai, không dùng để suy ra lực nén thực tế giữa các chai.
 
-`a_c` là gia tốc hướng tâm vật lý, hướng về tâm. Trong mô hình Unity, code dùng thành phần dạt ra ngoài trong hệ quy chiếu quay cùng lực bám bề mặt để tái hiện hiệu ứng chai bị cuốn theo mâm. Đây là xấp xỉ động học, không phải phép giải ma sát/tiếp xúc rigidbody.
+Không còn blower, air jet hoặc neck support rail. Thay đổi infeed không làm thay đổi mesh, vị trí pocket, logic index, filling, capping hay outfeed của Scalloped Star Wheel.
 
-Chai dùng bán kính logic `0,11 m`; trên mâm và tại giao rail, các tâm chai được tách theo khoảng cách tối thiểu `2R`. Khi rail bị dồn, chai mới dừng ở guide thay vì xuyên qua hàng chai.
-
-### Rơi, rail và gió
-
-Chuyển động rơi là `lerp` theo thời gian với độ lệch điểm đáp `0,18 m`; không mô phỏng rơi tự do, lực cản hay quỹ đạo parabol.
-
-Trên rail, vận tốc được tăng dần tới vận tốc mục tiêu nhờ tham số gió. `neckRailGravityAccelerationMps2` là gia tốc cấp liệu hiệu dụng; nó không phải trực tiếp `g sin(θ)` vì rail runtime gần như ngang. Bốn air jet nghiêng xuống `15°` để biểu diễn hướng khí, không phải mô phỏng CFD.
-
-Với khoảng cách phẳng từ tâm chai tới tâm mâm là `d`, cao độ chai được chuyển mượt:
-
-```text
-u = clamp01((d - R_table) / 0,22)
-s = 3u² - 2u³
-y = (1 - s)y_table + sy_rail
-```
-
-Vì vậy chai giữ cao độ mặt mâm đến `d = 0,95 m`, rồi hạ liên tục trong `0,22 m` tiếp theo.
-
-### Chiết rót và QC
-
-Ba vòi rót tạo batch ba chai. Xác suất rót đủ là `0,9`; chai lỗi nhận mức đầy ngẫu nhiên `0,5–0,6`. Thể tích bồn giảm theo tổng thể tích đã cấp:
-
-```text
-LiquidLevel_next = LiquidLevel_now - Σ(Δvolume01 · bottleCapacityLiters)
-```
-
-QC dùng ngưỡng:
-
-```text
-liquidVolume01 >= 0,95  -> PASS
-liquidVolume01 <  0,95  -> REJECT
-```
-
-## 5. Cấu hình chạy demo
+## Cấu hình demo
 
 | Hạng mục | Giá trị |
 | --- | ---: |
 | Turntable | `18 rpm`, bán kính `0,95 m` |
 | Buffer | 12 chai đầu, tối đa 16, ngưỡng xả 7 |
 | Conveyor | `0,85 m/s`, slip runtime 0 |
+| Guide handoff | `0,14 s` |
 | Star wheel | 10 pocket, `36°/pocket` |
 | Filling / capping | 3 vòi / 3 đầu |
-| Chuyển sang rail | `0,14 s` |
-| Hạ ngoài mâm | `0,22 m` |
+# Cap nhat dan chai
 
-## 6. Giới hạn và giá trị sử dụng
+Rail trai Segment 3 la chuan ap chai. Rail phai Segment 3 khong con chan de va duoc dat theo do rong than chai; duoi rail cong nhe dua chai vao pocket 0. Thanh chan xien tren mam quay dua chai ve cua ra truoc khi collider outlet forming guide ban giao chai sang belt.
 
-Mô hình không tính lực khí nén, áp suất chất lỏng, biến dạng carton, tiếp xúc 3D hay CFD. Star wheel đặt chai theo slot logic; chai chưa được parent vào pocket cơ khí thật. Do đó, kết quả dùng để minh họa, kiểm tra logic và thảo luận thiết kế, không dùng làm giá trị hiệu chuẩn sản xuất.
+## Cap nhat mam va star wheel
 
-Giá trị học thuật của project là làm rõ cách kết hợp mô hình trạng thái, công thức cơ học cơ bản, trực quan 3D và chỉ số vận hành. Đây cũng là nền tảng để thêm telemetry, VVUQ và so sánh với dây chuyền thực trong bước tiếp theo.
+Mam quay va mat slat conveyor nay dong cao do; transfer plate nho thay the outlet forming guide de chai truot vao belt. Slat conveyor luon animate trong Play Mode. Disc/continuous barrier cua Star Wheel ha `0.288m`, va notch pocket doi theo ban kinh than chai.
 
-## 7. Tham khảo
+## Chinh nhanh trong Inspector
 
-1. [ISO 23247-2:2021 — Reference architecture for manufacturing digital twins](https://www.iso.org/cms/%20render/live/en/sites/isoorg/contents/data/standard/07/87/78743.html).
-2. [NIST — Digital Twins for Advanced Manufacturing](https://www.nist.gov/programs-projects/digital-twins-advanced-manufacturing).
-3. [OpenStax Physics — Angular velocity and centripetal acceleration](https://openstax.org/books/physics/pages/6-key-equations).
+Chon `Filling Filtering Demo Bootstrap`: nhom **Infeed tail curve tuning** chinh End Curve 6, nhom **Star wheel continuous barrier tuning** chinh do mo barrier. Sau do dung context menu **Rebuild Filling & Filtering Demo**.
