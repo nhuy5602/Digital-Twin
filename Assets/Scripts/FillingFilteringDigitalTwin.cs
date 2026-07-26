@@ -2837,10 +2837,7 @@ namespace ConveyorTwin
                 yield return null;
             }
 
-            bottle.capPlaced = true;
-            bottle.cappingCompleted = true;
-            bottle.status = BottleQualityStatus.Capped;
-            bottle.RefreshVisuals();
+            CompleteCapping(bottle);
 
             yield return MoveCappingHeads(activeHeads, downPositions, basePositions, capperMoveSeconds);
 
@@ -2898,10 +2895,7 @@ namespace ConveyorTwin
             {
                 if (bottle != null && fillingSlotAssignments.ContainsKey(bottle))
                 {
-                    bottle.capPlaced = true;
-                    bottle.cappingCompleted = true;
-                    bottle.status = BottleQualityStatus.Capped;
-                    bottle.RefreshVisuals();
+                    CompleteCapping(bottle);
                 }
             }
 
@@ -3083,9 +3077,7 @@ namespace ConveyorTwin
                     continue;
                 }
 
-                bottle.cappingCompleted = true;
-                bottle.status = BottleQualityStatus.Capped;
-                bottle.RefreshVisuals();
+                CompleteCapping(bottle);
             }
 
             yield return MoveCappingHeads(activeHeads, downPositions, basePositions, 0.22f);
@@ -3190,6 +3182,30 @@ namespace ConveyorTwin
                 bottlesInSplitGroup = 0;
                 nextSplitLane = nextSplitLane == SplitLane.A ? SplitLane.B : SplitLane.A;
             }
+        }
+
+        private void CompleteCapping(BottleProcessState bottle)
+        {
+            if (bottle == null)
+            {
+                return;
+            }
+
+            bottle.capPlaced = true;
+            bottle.cappingCompleted = true;
+
+            // Capping is a mechanical operation, not a quality result. Keep the original neutral bottle
+            // colour until QC has evaluated the fill level at the QC Sensor Beam.
+            if (!bottle.inspectionCompleted)
+            {
+                bottle.status = BottleQualityStatus.Filled;
+            }
+            else if (bottle.liquidVolume01 >= passThreshold)
+            {
+                bottle.status = BottleQualityStatus.Capped;
+            }
+
+            bottle.RefreshVisuals();
         }
 
         private void UpdateSplitterGuide()
