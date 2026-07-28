@@ -152,18 +152,13 @@ namespace ConveyorTwin
 
         private void DrawKpis(TwinSnapshot snapshot)
         {
-            GUILayout.Label("LIVE KPI", titleStyle);
-            DrawMetric("Throughput", $"{snapshot.throughputBottlesPerHour:0} bottles/h");
-            DrawMetric("Last batch", $"{snapshot.lastBatchFillPercent:0.0}%");
-            DrawMetric("Reject rate", $"{snapshot.rejectRatePercent:0.0}%");
-            DrawMetric("Turntable buffer", $"{snapshot.turntableBufferCount} | line {snapshot.bottlesOnConveyorCount}");
-            DrawMetric("Result", $"Pass {snapshot.totalPassed} | Reject {snapshot.totalRejected}");
-            DrawMetric("Overflow", snapshot.totalOverflowed.ToString());
-            DrawMetric("Reject escapes", snapshot.totalRejectEscapes.ToString());
-            DrawMetric("Disc", $"{snapshot.starWheelIndexSpeedRpm:0.00} rpm | dwell {snapshot.starWheelDwellSeconds:0.00} s");
-            DrawMetric("Turntable omega", $"{snapshot.angularSpeedRadPerSec:0.00} rad/s");
-            DrawMetric("Centrifugal a", $"{snapshot.centrifugalAccelerationMps2:0.00} m/s²");
-            DrawMetric("Star wheel", snapshot.starWheelPhase);
+            GUILayout.Label("KPI VẬN HÀNH", titleStyle);
+            DrawMetric("Sản lượng đạt (60s)", $"{snapshot.recentGoodOutputBottlesPerHour:0} chai/h");
+            DrawMetric("Độ đầy lô mới nhất", $"{snapshot.lastBatchFillPercent:0.0}% (95–105%)");
+            DrawMetric("Chất lượng QC", $"{snapshot.qcPassRatePercent:0.0}% ({snapshot.totalInspected - snapshot.totalOutOfSpec} đạt / {snapshot.totalOutOfSpec} lỗi)");
+            DrawMetric("Tràn chai", $"{snapshot.totalOverflowed} ({snapshot.overflowRatePercent:0.0}% QC)");
+            DrawMetric("Reject lọt", $"{snapshot.totalRejectEscapes} ({snapshot.rejectEscapeRatePercent:0.0}% lỗi)");
+            DrawMetric("Bộ đệm đầu vào", $"{snapshot.turntableBufferCount}/{snapshot.turntableBufferCapacity} chai");
         }
 
         private void DrawMetric(string name, string value)

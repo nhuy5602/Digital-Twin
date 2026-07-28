@@ -293,6 +293,7 @@ namespace ConveyorTwin
             process.infeedMotorSpeedRpm = 18f;
             process.pumpFlowLitersPerMinute = process.fillingNozzleCount * process.bottleCapacityLiters * 60f / process.starWheelDwellSeconds;
             process.passThreshold = 0.95f;
+            process.infiniteWaterSupply = true;
             // Keep each bottle base on its supporting surface while the bottle height changes.
             process.turntableCenter = new Vector3(InfeedTurntableBottleCenter.x, bottleLayout.TurntableBottleCenterY, InfeedTurntableBottleCenter.z);
             process.turntableRadius = 0.95f;

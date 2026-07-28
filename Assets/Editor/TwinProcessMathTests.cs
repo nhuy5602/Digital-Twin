@@ -1,4 +1,5 @@
 using ConveyorTwin;
+using System.Collections.Generic;
 using NUnit.Framework;
 using UnityEngine;
 
@@ -28,6 +29,14 @@ public class TwinProcessMathTests
         var output = TwinProcessMath.CalculateAvailablePumpOutputLiters(120f, 1f, 0.75f);
 
         Assert.That(output, Is.EqualTo(0.75f).Within(0.0001f));
+    }
+
+    [Test]
+    public void InfiniteWaterSupplyDoesNotLimitPumpOutputByVesselLevel()
+    {
+        var output = TwinProcessMath.CalculateAvailablePumpOutputLiters(120f, 1f, 0.75f, true);
+
+        Assert.That(output, Is.EqualTo(2f).Within(0.0001f));
     }
 
     [Test]
@@ -83,5 +92,28 @@ public class TwinProcessMathTests
     {
         Assert.That(TwinProcessMath.HasBottlePassedRejectSweepZone(1.48f, 1.15f, 0.21f, 0.11f), Is.True);
         Assert.That(TwinProcessMath.HasBottlePassedRejectSweepZone(1.46f, 1.15f, 0.21f, 0.11f), Is.False);
+    }
+
+    [Test]
+    public void RecentGoodOutputKeepsOnlyTheLatestSixtySecondsAndDoesNotAdvanceWhilePaused()
+    {
+        var outputTimes = new Queue<float>(new[] { 0f, 10f, 61f });
+
+        var countAtSixtyOneSeconds = TwinProcessMath.PruneAndCountRecentEvents(outputTimes, 61f, 60f);
+        var countWhilePaused = TwinProcessMath.PruneAndCountRecentEvents(outputTimes, 61f, 60f);
+
+        Assert.That(countAtSixtyOneSeconds, Is.EqualTo(2));
+        Assert.That(countWhilePaused, Is.EqualTo(2));
+        Assert.That(TwinProcessMath.CalculateHourlyRate(countWhilePaused, 60f), Is.EqualTo(120f).Within(0.0001f));
+    }
+
+    [Test]
+    public void KpiPercentagesUseQcAndDefectCountsWithSafeEmptyDenominators()
+    {
+        Assert.That(TwinProcessMath.CalculateQcPassRatePercent(10, 2), Is.EqualTo(80f).Within(0.0001f));
+        Assert.That(TwinProcessMath.CalculatePercentage(2, 10), Is.EqualTo(20f).Within(0.0001f));
+        Assert.That(TwinProcessMath.CalculatePercentage(1, 2), Is.EqualTo(50f).Within(0.0001f));
+        Assert.That(TwinProcessMath.CalculateQcPassRatePercent(0, 0), Is.EqualTo(0f));
+        Assert.That(TwinProcessMath.CalculatePercentage(1, 0), Is.EqualTo(0f));
     }
 }

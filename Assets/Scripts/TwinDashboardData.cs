@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace ConveyorTwin
 {
@@ -38,12 +39,19 @@ namespace ConveyorTwin
         public float effectiveReleaseIntervalSeconds;
         public float effectiveFillingDwellSeconds;
         public float throughputBottlesPerHour;
+        public float recentGoodOutputBottlesPerHour;
         public float averageFillPercent;
         public float lastBatchFillPercent;
         public float rejectRatePercent;
+        public int totalInspected;
+        public int totalOutOfSpec;
+        public float qcPassRatePercent;
+        public float overflowRatePercent;
+        public float rejectEscapeRatePercent;
         public float vesselLevelLiters;
         public float vesselCapacityLiters;
         public int turntableBufferCount;
+        public int turntableBufferCapacity;
         public int bottlesOnConveyorCount;
         public int totalPassed;
         public int totalRejected;
@@ -100,9 +108,50 @@ namespace ConveyorTwin
             return bottleZ > stationZ + UnityEngine.Mathf.Max(0f, sweepHalfLengthM) + UnityEngine.Mathf.Max(0f, bottleRadius);
         }
 
-        public static float CalculateAvailablePumpOutputLiters(float pumpFlowLitersPerMinute, float frameSeconds, float vesselLevelLiters)
+        public static int PruneAndCountRecentEvents(Queue<float> eventTimes, float currentTimeSeconds, float windowSeconds)
+        {
+            if (eventTimes == null)
+            {
+                return 0;
+            }
+
+            var cutoff = currentTimeSeconds - UnityEngine.Mathf.Max(0f, windowSeconds);
+            while (eventTimes.Count > 0 && eventTimes.Peek() < cutoff)
+            {
+                eventTimes.Dequeue();
+            }
+
+            return eventTimes.Count;
+        }
+
+        public static float CalculateHourlyRate(int itemCount, float windowSeconds)
+        {
+            return UnityEngine.Mathf.Max(0, itemCount) * 3600f / UnityEngine.Mathf.Max(0.001f, windowSeconds);
+        }
+
+        public static float CalculatePercentage(int numerator, int denominator)
+        {
+            if (denominator <= 0)
+            {
+                return 0f;
+            }
+
+            return UnityEngine.Mathf.Max(0, numerator) * 100f / denominator;
+        }
+
+        public static float CalculateQcPassRatePercent(int totalInspected, int totalOutOfSpec)
+        {
+            return CalculatePercentage(totalInspected - UnityEngine.Mathf.Max(0, totalOutOfSpec), totalInspected);
+        }
+
+        public static float CalculateAvailablePumpOutputLiters(float pumpFlowLitersPerMinute, float frameSeconds, float vesselLevelLiters, bool infiniteWaterSupply = false)
         {
             var requestedLiters = UnityEngine.Mathf.Max(0f, pumpFlowLitersPerMinute) / 60f * UnityEngine.Mathf.Max(0f, frameSeconds);
+            if (infiniteWaterSupply)
+            {
+                return requestedLiters;
+            }
+
             return UnityEngine.Mathf.Min(UnityEngine.Mathf.Max(0f, vesselLevelLiters), requestedLiters);
         }
 

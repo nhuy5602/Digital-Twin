@@ -13,6 +13,8 @@ namespace ConveyorTwin
 
     public class FillingFilteringDigitalTwin : MonoBehaviour
     {
+        private const float RecentOutputWindowSeconds = 60f;
+
         private struct InfeedGuideTransition
         {
             public Vector3 startPosition;
@@ -200,11 +202,14 @@ namespace ConveyorTwin
         public float bottleCapacityLiters = 1f;
         public float initialVesselLevelLiters = 120f;
         public float vesselCapacityLiters = 150f;
+        [Tooltip("Keeps the supply vessel full and prevents pump output from being limited by its stored volume.")]
+        public bool infiniteWaterSupply = true;
         public float infeedMotorSpeedRpm = 18f;
         [Header("Repeatable experiments")]
         public int randomSeed = 12345;
 
         public float ThroughputBottlesPerHour { get; private set; }
+        public float RecentGoodOutputBottlesPerHour { get; private set; }
         public float InfeedMotorSpeedRpm => infeedMotorSpeedRpm;
         public float LiquidLevelLiters { get; private set; }
         public float LastFillingTimeSeconds { get; private set; }
@@ -213,6 +218,8 @@ namespace ConveyorTwin
         public int TotalRejected { get; private set; }
         public int TotalOverflowed { get; private set; }
         public int TotalRejectEscapes { get; private set; }
+        public int TotalInspected { get; private set; }
+        public int TotalOutOfSpec { get; private set; }
         public int RejectedTrayBottleCount => rejectedTrayBottles.Count;
         public bool RejectTrayDischargeActive => rejectedTrayDischargeActive;
         public int TurntableBufferCount { get; private set; }
@@ -221,6 +228,11 @@ namespace ConveyorTwin
         public float CentrifugalAccelerationAtRimMps2 { get; private set; }
         public float AverageFillPercent => completedFillSamples > 0 ? completedFillRatioTotal / completedFillSamples * 100f : 0f;
         public float LastBatchFillPercent { get; private set; }
+        public int TotalQcPassed => Mathf.Max(0, TotalInspected - TotalOutOfSpec);
+        public float QcPassRatePercent => TwinProcessMath.CalculateQcPassRatePercent(TotalInspected, TotalOutOfSpec);
+        public float OverflowRatePercent => TwinProcessMath.CalculatePercentage(TotalOverflowed, TotalInspected);
+        public float RejectEscapeRatePercent => TwinProcessMath.CalculatePercentage(TotalRejectEscapes, TotalOutOfSpec);
+        public int TurntableBufferCapacity => Mathf.Max(1, maxTurntableBuffer);
         public float RejectRatePercent => TotalPassed + TotalRejected > 0
             ? TotalRejected * 100f / (TotalPassed + TotalRejected)
             : 0f;
@@ -301,6 +313,7 @@ namespace ConveyorTwin
         private readonly Dictionary<BottleProcessState, int> cappingSlotAssignments = new Dictionary<BottleProcessState, int>();
         private readonly Dictionary<BottleProcessState, float> infeedGuideProgresses = new Dictionary<BottleProcessState, float>();
         private readonly Dictionary<BottleProcessState, InfeedGuideTransition> infeedGuideTransitions = new Dictionary<BottleProcessState, InfeedGuideTransition>();
+        private readonly Queue<float> goodOutputTimestamps = new Queue<float>();
         private int completedCount;
         private float spawnTimer;
         private float releaseTimer;
@@ -340,7 +353,7 @@ namespace ConveyorTwin
         private void Awake()
         {
             Time.timeScale = 1f;
-            LiquidLevelLiters = initialVesselLevelLiters;
+            LiquidLevelLiters = infiniteWaterSupply ? vesselCapacityLiters : initialVesselLevelLiters;
             foreach (var bottle in bottles)
             {
                 if (bottle != null)
@@ -360,6 +373,11 @@ namespace ConveyorTwin
 
         private void Update()
         {
+            if (infiniteWaterSupply)
+            {
+                LiquidLevelLiters = vesselCapacityLiters;
+            }
+
             InitializeTurntableIfNeeded();
             AnimateMachines();
             UpdateInfeedGuideTransitions();
@@ -373,6 +391,7 @@ namespace ConveyorTwin
             TryStartSixPackDischarge();
             TryStartStarWheelFeedFromInfeedGuide();
             ThroughputBottlesPerHour = completedCount / Mathf.Max(Time.time / 3600f, 0.0001f);
+            UpdateRecentGoodOutputRate();
             TurntableBufferCount = turntableBottles.Count;
             BottlesOnConveyorCount = lineBottles.Count;
             BottlesAtFillingStation = CountUnfilledBottlesInFillingWindow();
@@ -471,7 +490,7 @@ namespace ConveyorTwin
             {
                 alert = "Overflow detected";
             }
-            else if (LiquidLevelLiters <= bottleCapacityLiters * ActiveFillingNozzleCount)
+            else if (!infiniteWaterSupply && LiquidLevelLiters <= bottleCapacityLiters * ActiveFillingNozzleCount)
             {
                 alert = "Low vessel level";
             }
@@ -505,12 +524,19 @@ namespace ConveyorTwin
                 effectiveReleaseIntervalSeconds = EffectiveReleaseIntervalSeconds,
                 effectiveFillingDwellSeconds = EffectiveFillingDwellSeconds,
                 throughputBottlesPerHour = ThroughputBottlesPerHour,
+                recentGoodOutputBottlesPerHour = RecentGoodOutputBottlesPerHour,
                 averageFillPercent = AverageFillPercent,
                 lastBatchFillPercent = LastBatchFillPercent,
                 rejectRatePercent = RejectRatePercent,
+                totalInspected = TotalInspected,
+                totalOutOfSpec = TotalOutOfSpec,
+                qcPassRatePercent = QcPassRatePercent,
+                overflowRatePercent = OverflowRatePercent,
+                rejectEscapeRatePercent = RejectEscapeRatePercent,
                 vesselLevelLiters = LiquidLevelLiters,
                 vesselCapacityLiters = vesselCapacityLiters,
                 turntableBufferCount = TurntableBufferCount,
+                turntableBufferCapacity = TurntableBufferCapacity,
                 bottlesOnConveyorCount = BottlesOnConveyorCount,
                 totalPassed = TotalPassed,
                 totalRejected = TotalRejected,
@@ -521,6 +547,17 @@ namespace ConveyorTwin
                 starWheelPhase = StarWheelPhase,
                 alert = alert
             };
+        }
+
+        private void UpdateRecentGoodOutputRate()
+        {
+            var recentGoodOutputCount = TwinProcessMath.PruneAndCountRecentEvents(
+                goodOutputTimestamps,
+                Time.time,
+                RecentOutputWindowSeconds);
+            RecentGoodOutputBottlesPerHour = TwinProcessMath.CalculateHourlyRate(
+                recentGoodOutputCount,
+                RecentOutputWindowSeconds);
         }
 
         private void AnimateMachines()
@@ -1941,12 +1978,13 @@ namespace ConveyorTwin
                     }
                 }
 
-                if (activeBottleCount > 0 && LiquidLevelLiters > 0f)
+                if (activeBottleCount > 0 && (infiniteWaterSupply || LiquidLevelLiters > 0f))
                 {
                     var availableLiters = TwinProcessMath.CalculateAvailablePumpOutputLiters(
                         pumpFlowLitersPerMinute,
                         frameDuration,
-                        LiquidLevelLiters);
+                        LiquidLevelLiters,
+                        infiniteWaterSupply);
                     var litersPerBottle = availableLiters / activeBottleCount;
                     var dispensedLiters = 0f;
 
@@ -1968,7 +2006,10 @@ namespace ConveyorTwin
                         dispensedLiters += litersPerBottle;
                     }
 
-                    LiquidLevelLiters = Mathf.Max(0f, LiquidLevelLiters - dispensedLiters);
+                    if (!infiniteWaterSupply)
+                    {
+                        LiquidLevelLiters = Mathf.Max(0f, LiquidLevelLiters - dispensedLiters);
+                    }
                 }
                 yield return null;
             }
@@ -3204,7 +3245,13 @@ namespace ConveyorTwin
 
         private void InspectBottle(BottleProcessState bottle)
         {
+            if (bottle == null || bottle.inspectionCompleted)
+            {
+                return;
+            }
+
             bottle.inspectionCompleted = true;
+            TotalInspected++;
             if (bottle.IsFillWithinSpecification(passThreshold))
             {
                 InspectionStatus = InspectionStatus.Normal;
@@ -3220,6 +3267,7 @@ namespace ConveyorTwin
             }
             else
             {
+                TotalOutOfSpec++;
                 InspectionStatus = InspectionStatus.AnomalyDetected;
                 bottle.MarkRejected();
             }
@@ -3992,6 +4040,7 @@ namespace ConveyorTwin
             if (passed)
             {
                 TotalPassed++;
+                goodOutputTimestamps.Enqueue(Time.time);
             }
             else
             {

@@ -51,7 +51,7 @@ Ví dụ: index 1 pocket ở 6.67 rpm trên Disc 10 pocket mất xấp xỉ 0.90
 
 ## Mô hình rót nước và QC
 
-Mỗi chai có dung tích danh định 1 L. Trong toàn bộ dwell:
+Mỗi chai có dung tích danh định 1 L. Bồn cấp nước đang ở chế độ vô hạn, nên mức bồn luôn đầy và không giới hạn lưu lượng bơm. Trong toàn bộ dwell:
 
 1. Van/nozzle tiếp tục mở với mọi chai đang ở filling pocket, kể cả chai đã đạt 100%.
 2. Lưu lượng bơm khả dụng được giới hạn bởi lượng còn lại trong bồn.
