@@ -2,7 +2,7 @@
 
 Mô phỏng Unity cho dây chuyền chai: cấp chai từ mâm xoay, đưa vào Scalloped Star Wheel Disc, rót nước, đóng nắp, kiểm tra chất lượng, loại chai lỗi và đóng six-pack.
 
-Đây là **digital twin mô phỏng**. HUD và web dashboard chỉ điều khiển trạng thái mô phỏng trên máy cục bộ; không có kết nối PLC, thiết bị thật hoặc telemetry sản xuất.
+Đây là **digital twin mô phỏng**. HUD chỉ điều khiển trạng thái mô phỏng trên máy cục bộ; không có kết nối PLC, thiết bị thật hoặc telemetry sản xuất.
 
 ## Chạy nhanh
 
@@ -12,8 +12,6 @@ Yêu cầu: **Unity 6000.5.0f1**.
 2. Bấm Play.
 3. HUD xuất hiện ở góc trên trái. Có thể chỉnh slider trực tiếp; giá trị được áp dụng ngay khi kéo.
 4. Để dựng lại toàn bộ phần scene sinh tự động, dùng **Tools > Conveyor Twin > Build Demo Scene**.
-
-Web dashboard chạy trên máy cục bộ tại [http://127.0.0.1:8088/](http://127.0.0.1:8088/) khi Play Mode đang chạy. Có thể mở bằng nút **Open web dashboard** trong HUD.
 
 ## Luồng công nghệ
 
@@ -155,12 +153,11 @@ Lệnh Build Demo Scene dựng lại phần scene sinh tự động và lưu và
 
 | Tệp | Vai trò |
 | --- | --- |
-| [Assets/Scripts/ConveyorDemoRuntimeBootstrap.cs](Assets/Scripts/ConveyorDemoRuntimeBootstrap.cs) | Dựng các mesh/station, chai, nozzle, Disc, reject tray, HUD và web dashboard. |
+| [Assets/Scripts/ConveyorDemoRuntimeBootstrap.cs](Assets/Scripts/ConveyorDemoRuntimeBootstrap.cs) | Dựng các mesh/station, chai, nozzle, Disc, reject tray và HUD. |
 | [Assets/Scripts/FillingFilteringDigitalTwin.cs](Assets/Scripts/FillingFilteringDigitalTwin.cs) | Logic infeed, index/dwell, rót, capping, QC, reject sweep, splitter và đóng gói. |
 | [Assets/Scripts/BottleProcessState.cs](Assets/Scripts/BottleProcessState.cs) | Trạng thái từng chai, lượng nước thực, overflow và hiệu ứng nước ngoài thân/cổ chai. |
 | [Assets/Scripts/TwinDashboardData.cs](Assets/Scripts/TwinDashboardData.cs) | Setpoint, snapshot, preset và các hàm toán học thuần. |
 | [Assets/Scripts/FillingFilteringHud.cs](Assets/Scripts/FillingFilteringHud.cs) | HUD điều khiển và KPI trong Unity. |
-| [Assets/Scripts/TwinDashboardWebServer.cs](Assets/Scripts/TwinDashboardWebServer.cs) | WebSocket/web dashboard cục bộ trên port 8088. |
 | [Assets/Editor/ConveyorDemoSceneBuilder.cs](Assets/Editor/ConveyorDemoSceneBuilder.cs) | Menu dựng lại demo scene. |
 | [Assets/Editor/TwinProcessMathTests.cs](Assets/Editor/TwinProcessMathTests.cs) | Test toán học cho dwell, RPM/index, bơm, fill specification và reject sweep. |
 

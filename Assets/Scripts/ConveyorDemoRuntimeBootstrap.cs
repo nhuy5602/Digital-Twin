@@ -306,9 +306,12 @@ namespace ConveyorTwin
             process.referenceReleaseIntervalSeconds = process.releaseIntervalSeconds;
             process.linkInfeedRpmToRelease = true;
             process.infeedGuideWheelCaptureDistanceM = 0.08f;
-            process.rejectedTrayDischargeDelaySeconds = 0.08f;
-            process.rejectedTrayDischargeSeconds = 0.10f;
-            process.rejectedTrayReturnSeconds = 0.10f;
+            process.rejectedTrayDischargeDelaySeconds = 0.03f;
+            process.rejectedTrayDischargeSeconds = 0.06f;
+            process.rejectedTrayReturnSeconds = 0.06f;
+            process.rejectSweepExtendSeconds = 0.10f;
+            process.rejectSweepReturnSeconds = 0.10f;
+            process.rejectSweepTrayEdgeClearanceM = 0f;
 
             foreach (var conveyorAnimator in root.GetComponentsInChildren<SlatChainConveyorAnimator>())
             {
@@ -1044,11 +1047,7 @@ namespace ConveyorTwin
             var hud = hudObject.AddComponent<FillingFilteringHud>();
             hud.process = process;
             hud.position = new Vector2(16f, 16f);
-            hud.size = new Vector2(700f, 840f);
-
-            var webDashboard = hudObject.AddComponent<TwinDashboardWebServer>();
-            webDashboard.process = process;
-            webDashboard.port = 8088;
+            hud.size = new Vector2(700f, 640f);
         }
 
         private Mesh CreateTaperedCylinderMesh(int segments, float bottomRadius, float topRadius, float height)

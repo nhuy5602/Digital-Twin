@@ -125,10 +125,18 @@ namespace ConveyorTwin
 
         [Header("Rejected bottle tray")]
         [Min(1)] public int rejectedTrayCapacity = 4;
-        [Min(0f)] public float rejectedTrayDischargeDelaySeconds = 0.08f;
-        [Min(0.05f)] public float rejectedTrayDischargeSeconds = 0.10f;
-        [Min(0.05f)] public float rejectedTrayReturnSeconds = 0.10f;
+        [Min(0f)] public float rejectedTrayDischargeDelaySeconds = 0.03f;
+        [Min(0.05f)] public float rejectedTrayDischargeSeconds = 0.06f;
+        [Min(0.05f)] public float rejectedTrayReturnSeconds = 0.06f;
         public Vector3 rejectedTrayDischargeOffset = new Vector3(-1.15f, 0f, 0f);
+
+        [Header("Reject sweep motion")]
+        [Tooltip("Time for the reject sweep bar to move from its home position to the tray edge.")]
+        [Min(0.02f)] public float rejectSweepExtendSeconds = 0.10f;
+        [Tooltip("Time for the reject sweep bar to return from the tray edge to its home position.")]
+        [Min(0.02f)] public float rejectSweepReturnSeconds = 0.10f;
+        [Tooltip("Clearance between the sweep bar's leading face and the outside edge of the tray base.")]
+        [Min(0f)] public float rejectSweepTrayEdgeClearanceM = 0f;
 
         [Header("Slat chain conveyor")]
         public float slatPitchM = 0.22f;
@@ -3677,16 +3685,64 @@ namespace ConveyorTwin
 
             rejectSweepActive = true;
             var basePosition = rejectSweepBar != null ? rejectSweepBar.localPosition : Vector3.zero;
-            var traySlot = GetNextRejectedTrayPosition(starWheelCenter.y);
-            var extendedPosition = new Vector3(traySlot.x + 0.11f, basePosition.y, basePosition.z);
+            var extendedPosition = GetRejectSweepTrayEdgePosition(basePosition);
 
-            yield return MoveRejectSweepBarAndCollect(basePosition, extendedPosition, 0.22f);
+            yield return MoveRejectSweepBarAndCollect(basePosition, extendedPosition, rejectSweepExtendSeconds);
             yield return DepositSweptBottles();
-            yield return MoveRejectSweepBarAndCollect(extendedPosition, basePosition, 0.22f);
+            yield return MoveRejectSweepBarAndCollect(extendedPosition, basePosition, rejectSweepReturnSeconds);
             yield return DepositSweptBottles();
 
             rejectSweepActive = false;
             rejectSweepRequestedBottles.Remove(bottle);
+        }
+
+        private Vector3 GetRejectSweepTrayEdgePosition(Vector3 barHomeLocalPosition)
+        {
+            if (rejectSweepBar == null)
+            {
+                return barHomeLocalPosition;
+            }
+
+            var barParent = rejectSweepBar.parent;
+            var targetWorldPosition = barParent != null
+                ? barParent.TransformPoint(barHomeLocalPosition)
+                : barHomeLocalPosition;
+            var barHalfWidth = GetRejectSweepBounds().extents.x;
+            var trayBaseEdgeX = GetRejectedTrayBaseBounds().max.x;
+
+            // The bar approaches from the positive-X side. Its leading (left) face stops at the
+            // base edge, rather than allowing the bar's centre to enter the tray.
+            targetWorldPosition.x = trayBaseEdgeX + barHalfWidth + Mathf.Max(0f, rejectSweepTrayEdgeClearanceM);
+            return barParent != null
+                ? barParent.InverseTransformPoint(targetWorldPosition)
+                : targetWorldPosition;
+        }
+
+        private Bounds GetRejectedTrayBaseBounds()
+        {
+            if (rejectedBottleTray != null)
+            {
+                var trayBase = rejectedBottleTray.Find("Rejected Bottle Tray Base");
+                if (trayBase != null)
+                {
+                    var collider = trayBase.GetComponent<Collider>();
+                    if (collider != null)
+                    {
+                        return collider.bounds;
+                    }
+
+                    var renderer = trayBase.GetComponent<Renderer>();
+                    if (renderer != null)
+                    {
+                        return renderer.bounds;
+                    }
+                }
+
+                // Fallback for scenes built before the tray base was named separately.
+                return new Bounds(rejectedBottleTray.position, new Vector3(0.70f, 0.06f, 0.82f));
+            }
+
+            return new Bounds(new Vector3(-0.69f, 0.50f, rejectStationZ), new Vector3(0.70f, 0.06f, 0.82f));
         }
 
         private Bounds GetRejectSweepBounds()
