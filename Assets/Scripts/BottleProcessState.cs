@@ -63,7 +63,7 @@ namespace ConveyorTwin
         public void SetVolume(float volume01)
         {
             liquidVolume01 = Mathf.Max(0f, volume01);
-            isOverflowed = liquidVolume01 > 1f;
+            isOverflowed = TwinProcessMath.HasBottleOverflowed(liquidVolume01);
             RefreshVisuals();
         }
 

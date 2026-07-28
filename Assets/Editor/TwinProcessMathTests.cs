@@ -42,11 +42,12 @@ public class TwinProcessMathTests
     }
 
     [Test]
-    public void FillSpecificationPassesOnlyFromNinetyFiveToOneHundredPercent()
+    public void FillSpecificationPassesFromNinetyFiveToOneHundredAndFivePercent()
     {
         Assert.That(TwinProcessMath.IsFillWithinSpecification(0.95f, 0.95f), Is.True);
         Assert.That(TwinProcessMath.IsFillWithinSpecification(1f, 0.95f), Is.True);
-        Assert.That(TwinProcessMath.IsFillWithinSpecification(1.01f, 0.95f), Is.False);
+        Assert.That(TwinProcessMath.IsFillWithinSpecification(1.05f, 0.95f), Is.True);
+        Assert.That(TwinProcessMath.IsFillWithinSpecification(1.051f, 0.95f), Is.False);
         Assert.That(TwinProcessMath.IsFillWithinSpecification(0.94f, 0.95f), Is.False);
     }
 
@@ -59,6 +60,13 @@ public class TwinProcessMathTests
 
         Assert.That(perBottle, Is.GreaterThan(1f));
         Assert.That(perBottle, Is.EqualTo(2.25f).Within(0.001f));
+    }
+
+    [Test]
+    public void OverflowBeginsOnlyAboveOneHundredAndFivePercent()
+    {
+        Assert.That(TwinProcessMath.HasBottleOverflowed(1.05f), Is.False);
+        Assert.That(TwinProcessMath.HasBottleOverflowed(1.051f), Is.True);
     }
 
     [Test]

@@ -60,13 +60,13 @@ Mỗi chai có dung tích danh định 1 L. Trong toàn bộ dwell:
 
 Điều kiện pass cố định:
 
-    95% <= lượng nước thực tế <= 100%
+    95% <= lượng nước thực tế <= 105%
 
 | Kết quả | Điều kiện | Hệ quả |
 | --- | --- | --- |
-| Pass | 95–100% | Chai qua QC, đi tới splitter/đóng gói. |
+| Pass | 95–105% | Chai qua QC, đi tới splitter/đóng gói. |
 | Underfill | <95% | Chai bị QC đánh dấu reject. |
-| Overflow | >100% | Chai bị QC đánh dấu reject. |
+| Overflow | >105% | Chai bị QC đánh dấu reject. |
 
 Overflow không chặn Tightener: chai vẫn được đóng nắp theo chu trình cơ khí, sau đó QC mới phân loại. Khi overflow, lớp nước xanh sáng phủ bên ngoài cả **Bottle Body** và **Bottle Neck**; hai lớp này không có collider và tự tắt khi chai reset.
 
@@ -134,7 +134,7 @@ Preset chỉ đổi setpoint. Nếu muốn làm lại một thử nghiệm với
 - Pump flow, lượng bồn và Disc dwell là ba biến quyết định trực tiếp lượng nước/chất lượng rót.
 - Conveyor speed không nằm trong công thức lượng nước rót.
 - Disc index speed làm thay đổi thời gian di chuyển và năng suất chu trình, nhưng không thay đổi khoảng dwell đã cấu hình.
-- Average fill có thể vượt 100% vì đây là lượng nước thực tế trước khi QC loại chai overflow.
+- Average fill có thể vượt 105% vì đây là lượng nước thực tế trước khi QC loại chai overflow.
 - Reject rate chỉ tính chai đã được phân loại pass/reject; reject escape có KPI riêng.
 
 ## Dựng scene và tinh chỉnh hình học
@@ -169,7 +169,7 @@ Test Editor gồm các quan hệ chính:
 - RPM quyết định thời gian index.
 - Lượng bơm bị giới hạn đúng bởi lượng còn trong bồn.
 - Pump thấp không đạt lượng danh định trong dwell.
-- 95% và 100% pass; dưới 95% hoặc vượt 100% fail.
+- 95% và 105% pass; dưới 95% hoặc vượt 105% fail.
 - Pump 300 L/min trong dwell mặc định có thể tạo overflow.
 - Vùng quét Reject Sweep Bar và reject escape được tính theo bounds vật lý.
 

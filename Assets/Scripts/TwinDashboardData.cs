@@ -70,6 +70,8 @@ namespace ConveyorTwin
 
     public static class TwinProcessMath
     {
+        public const float OverflowFillRatio = 1.05f;
+
         // Pure helpers keep the physical relations testable without a running scene.
         public static float CalculateDiscDwellSeconds(float dwellSeconds)
         {
@@ -106,7 +108,12 @@ namespace ConveyorTwin
 
         public static bool IsFillWithinSpecification(float fillRatio, float passThreshold)
         {
-            return fillRatio >= UnityEngine.Mathf.Clamp01(passThreshold) && fillRatio <= 1f;
+            return fillRatio >= UnityEngine.Mathf.Clamp01(passThreshold) && fillRatio <= OverflowFillRatio;
+        }
+
+        public static bool HasBottleOverflowed(float fillRatio)
+        {
+            return fillRatio > OverflowFillRatio;
         }
     }
 }
