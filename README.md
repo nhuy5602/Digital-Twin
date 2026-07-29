@@ -177,7 +177,10 @@ Chạy test trong Unity qua **Window > General > Test Runner > EditMode**.
 
 ## Tài liệu bổ sung
 
+- [docs/nguyen-ly-vat-ly.md](docs/nguyen-ly-vat-ly.md): Các nguyên lý vật lý, công thức động học, thủy động học và va chạm theo 7 quy trình kỹ thuật.
+- [docs/so-do-thiet-ke-he-thong.md](docs/so-do-thiet-ke-he-thong.md): Sơ đồ thiết kế kiến trúc phần mềm hệ thống Digital Twin theo chuẩn C4 Model (Context, Container, Component, Code/Class).
 - [docs/scalloped-star-wheel-logic.md](docs/scalloped-star-wheel-logic.md): ghi chú hình học và handoff infeed/Star Wheel.
 - [docs/bao-cao-ngan.md](docs/bao-cao-ngan.md): báo cáo tóm tắt.
 
-README này là mô tả vận hành hiện tại của digital twin; các tài liệu bổ sung có thể tập trung vào các đợt chỉnh hình học cũ hơn.
+README này là mô tả vận hành hiện tại của digital twin; các tài liệu bổ sung cung cấp cái nhìn chi tiết về lý thuyết vật lý và kiến trúc phần mềm.
+
