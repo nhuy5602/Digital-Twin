@@ -47,36 +47,42 @@ $$\vec{v}_{\text{bottle}}(t + \Delta t) = \left[ \vec{v}_{\text{bottle}}(t) + (\
 - **Thanh chắn chéo Deflector & Nẹp cửa ra Guide**: Phản lực nẹp được mô phỏng bằng phương pháp chiếu vận tốc triệt tiêu thành phần vuông góc với pháp tuyến mặt chắn $\hat{n}$:
   $$\vec{v} \leftarrow \vec{v} - (\vec{v} \cdot \hat{n})\hat{n}$$
 
-### d. Phân tách Va chạm Đa Chai (Multi-body Spatial Separation)
-Để tránh hiện tượng chồng lấn thể tích giữa các chai trên mâm, thuật toán `ResolveTurntableBottleSeparation` duyệt tất cả các cặp chai. Nếu khoảng cách giữa hai tâm $d < 2 r_{\text{bottle}}$:
+### d. Giải Va chạm Phẳng 2D (Multi-body 2D Spatial Separation)
+Thay vì sử dụng bộ giải vật lý 3D ngốn tài nguyên CPU của Engine, hệ thống sử dụng thuật toán giải va chạm phẳng 2D `ResolveTurntableBottleSeparation` liên tục quét khoảng cách tâm 2D giữa các chai trong mặt phẳng $XZ$.
+Với bán kính chai $r_{\text{bottle}} = 0.11\text{ m}$, khoảng cách tâm an toàn giữa 2 chai là $d_{\text{min}} = 2 r_{\text{bottle}} = 0.22\text{ m}$. Khi phát hiện hai chai chồng lấn thể tích ($d < 0.22\text{ m}$):
 
-$$\Delta \vec{P} = \frac{2 r_{\text{bottle}} - d}{2} \cdot \hat{n}_{\text{separation}}$$
+$$\Delta \vec{P} = \frac{0.22 - d}{2} \cdot \hat{n}_{\text{separation}}$$
 
-Mỗi chai được đẩy ra một khoảng $\Delta \vec{P}$ theo hướng ngược nhau.
+Mỗi chai được tự động đẩy ngược hướng một đoạn $\Delta \vec{P}$ giúp duy trì dòng chảy tự nhiên và triệt tiêu xung đột thể tích mà không sinh overhead vật lý 3D.
 
-### e. Nội suy Quỹ đạo Guide Path & Hàng chờ (Queue Spacing Kinematics)
-Chai rời mâm di chuyển dọc theo chuỗi đường cong dẫn hướng (Infeed Guide Path) với vận tốc băng tải $v_{\text{conveyor}}$. Động học hàng chờ 1D đảm bảo khoảng cách tối thiểu giữa các chai:
-
-$$s_{i+1}(t) \le s_i(t) - 2 r_{\text{bottle}}$$
-
-Khi đầu đường dẫn bị chặn, chai đứng yên tại vị trí kết thúc và các chai sau lần lượt xếp hàng dừng lại mà không chồng lấn.
+### e. Xấp xỉ Động học & Nội suy Chuyển tiếp Hermite (Hermite Spline & SmoothStep Kinematics)
+Chai rời mâm di chuyển dọc theo chuỗi đường cong dẫn hướng (Infeed Guide Path) với vận tốc băng tải $v_{\text{conveyor}}$. 
+- Tại điểm giao cắt bàn giao giữa mâm quay và guide path (`TransitioningToInfeedGuide`), hệ thống áp dụng **hàm nội suy Hermite bậc 3 (Cubic Hermite Spline)** `EvaluateCubicHermite`:
+  $$\vec{P}(t) = (2t^3 - 3t^2 + 1)\vec{P}_{\text{start}} + (t^3 - 2t^2 + t)\vec{T}_{\text{start}} + (-2t^3 + 3t^2)\vec{P}_{\text{end}} + (t^3 - t^2)\vec{T}_{\text{end}}$$
+  Với tiếp tuyến đầu $\vec{T}_{\text{start}} = \vec{0}$ giúp triệt tiêu vận tốc giật cục ban đầu và tiếp tuyến cuối $\vec{T}_{\text{end}}$ khớp với vận tốc băng tải.
+- Các chuyển động trượt cơ khí khác (vòi rót, nắp, xi-lanh) áp dụng hàm `Mathf.SmoothStep` ($3t^2 - 2t^3$) giúp hành trình mượt mà, chống giật cục.
+- Động học hàng chờ 1D đảm bảo khoảng cách tối thiểu giữa các chai: $s_{i+1}(t) \le s_i(t) - 0.22\text{ m}$.
 
 ---
 
 ## 2. Điều phối Scalloped Star Wheel (Pocket Indexing & Dynamic Capture)
 
-### a. Động học Quay Gián đoạn (Intermittent Indexing Kinematics)
+### a. Động học Quay Gián đoạn & Chu kỳ Bánh sao (Intermittent Indexing Kinematics)
 Đĩa Star Wheel 10 pocket quay gián đoạn để dịch chuyển chai giữa các công đoạn:
+- Góc bước chia đĩa: $\Delta \theta = \frac{360^\circ}{10} = 36^\circ$ cho mỗi pocket.
+- Chu kỳ luân phiên giữa **pha dừng gia công (Dwell $1.35\text{ s}$)** và **pha quay chuyển bước (Index)**.
 - Vận tốc góc pha index:
   $$\omega_{\text{index}} = \text{RPM}_{\text{starwheel}} \cdot \frac{2\pi}{60}$$
-- Thời gian dịch chuyển $\Delta N$ pocket (mặc định $\Delta N = 3$ pocket $= 108^\circ$):
+- Thời gian dịch chuyển $\Delta N$ pocket (mặc định dịch chuyển 3 pocket $= 108^\circ$ cho lô 3 chai):
   $$T_{\text{index}} = \frac{\Delta N}{N_{\text{pockets}}} \cdot \frac{60}{\text{RPM}_{\text{starwheel}}}$$
+  Góc quay và vị trí chai trong pha index được nội suy mượt theo thời gian thông qua `Quaternion.Slerp` và `Mathf.Lerp`.
 
 ### b. Chuyển đổi Tọa độ Cực - Cartesian (Polar-to-Cartesian Transformation)
-Tọa độ pocket thứ $k$ ($k \in [0, 9]$) với góc bước $\Delta \theta = \frac{2\pi}{10} = 36^\circ$:
+Tọa độ pocket thứ $k$ ($k \in [0, 9]$) với góc bước chia $36^\circ$:
 
-$$x_k(t) = x_{\text{center}} + R_{\text{wheel}} \cdot \cos\left(\theta(t) + k \cdot \frac{2\pi}{10}\right)$$
-$$z_k(t) = z_{\text{center}} + R_{\text{wheel}} \cdot \sin\left(\theta(t) + k \cdot \frac{2\pi}{10}\right)$$
+$$x_k(t) = x_{\text{center}} + R_{\text{wheel}} \cdot \cos\left(\theta(t) + k \cdot 36^\circ\right)$$
+$$z_k(t) = z_{\text{center}} + R_{\text{wheel}} \cdot \sin\left(\theta(t) + k \cdot 36^\circ\right)$$
+
 
 ### c. Bắt chai vào Pocket 0 (Dynamic Pocket Capture Handoff)
 Khi chai đầu hàng chờ guide path tiến vào vùng bắt ($d \le d_{\text{capture}}$), hệ thống tạo quỹ đạo chuyển tiếp dạng cung tiếp tuyến (arc interpolation) đưa chai vào đúng tâm Pocket 0 của đĩa Star Wheel.
@@ -176,18 +182,34 @@ Chai di chuyển liên tục theo chiều dọc băng tải $Z(t) = Z_0 + v_{\te
 
 ## 7. Phân làn & Đóng gói Six-Pack (A/B Splitting & Packaging Push)
 
-### a. Động học Thanh Định hướng Phân làn (Splitter Guide Pivot Kinematics)
+### a. Động học Thanh Định hướng & Khoảng Thời gian An toàn (Diverter Guide Kinematics & Clearance Time)
 Thanh phân làn xoay quanh tâm $Z_{\text{pivot}}$ để chuyển hướng luồng chai giữa Lane A ($0^\circ$) và Lane B ($\theta_{\text{split}}$).
+- Khoảng thời gian an toàn cho phép thanh gạt xoay chuyển làn $t_{\text{available}}$ để không va chạm với chai tiếp theo:
+  $$t_{\text{available}} = \frac{d_{\text{spacing}} - 2 r_{\text{bottle}} - d_{\text{gap}}}{v_{\text{conveyor}}}$$
 
-### b. Bộ đếm Chai theo Lô (Photo-Eye Batch Counter)
-Cảm biến hồng ngoại đếm số chai đạt chuẩn đi qua. Khi số đếm đạt $N_{\text{batch}} = 6$:
-- Kích hoạt tín hiệu xoay thanh phân làn sang lane còn lại.
+### b. Bộ đếm Chai Phân làn A/B (Photo-Eye Batch Counter)
+Cảm biến hồng ngoại đếm số chai đạt chuẩn đi qua. Khi số đếm ở làn hiện tại đạt $N_{\text{lane}} = 3$ chai:
+- Kích hoạt tín hiệu xoay thanh định hướng chuyển luồng chai sang làn đối diện để hình thành khối 6 chai cân bằng $50/50$.
 
-### c. Xi-lanh Đẩy Đóng thùng Carton (Pack Pusher Cylinder Kinematics)
-Khi đủ 6 chai xếp hàng tại trạm đóng gói:
-1. Cửa chặn `PackStopGate` đóng lại giữ hàng chai.
-2. Xi-lanh đẩy `PackPusher` tiến ngang đẩy cả lô 6 chai vào thùng carton six-pack.
-3. Xi-lanh rút về vị trí ban đầu và mở cửa chặn cho lô chai tiếp theo.
+### c. Hình học Tọa độ Ma trận 3x2 (3x2 Grid Slot Positioning)
+Trạm đóng gói hình thành lô 6 chai dạng **Ma trận 3x2** (3 hàng dọc $\times$ 2 cột làn A/B):
+- Tọa độ 3D $(X_i, Z_i)$ của chai thứ $i$ ($i \in [0, 5]$):
+  $$Z_i = Z_{\text{hàng đầu}} - (\text{row}) \cdot p_{\text{hàng}} \quad \text{với } \text{row} = i \bmod 3$$
+  $$X_i = X_{\text{thùng}} \pm \frac{\Delta X_{\text{làn}}}{2}$$
+- Trong đó bước khoảng cách hàng $p_{\text{hàng}} = \max(p_{\text{danh định}}, \; 2 r_{\text{bottle}} + 0.015\text{m})$ khống chế chai không bị va nén vỡ.
+
+### d. Động lực học Chống đổ Chai bằng Gia tốc Mượt (SmoothStep Pusher Dynamics)
+Xi-lanh đẩy `PackPusher` tiến ngang đẩy cả khối 6 chai (dạng ma trận 3x2) vào thùng carton six-pack:
+- Quỹ đạo di chuyển $X(t)$ điều khiển theo hàm SmoothStep $S(t)$:
+  $$S(t) = 3t^2 - 2t^3 \quad \left(t = \frac{t_{\text{elapsed}}}{T_{\text{pusher}}} \in [0, 1]\right)$$
+  $$X(t) = X_{\text{start}} + (X_{\text{end}} - X_{\text{start}}) \cdot S(t)$$
+- Vận tốc tức thời: $v(t) = \frac{dX}{dt} = 6t(1 - t) \cdot \frac{\Delta X}{T_{\text{pusher}}}$.
+  - Tại $t = 0 \implies v(0) = 0$ (khởi động êm từ 0, không bị giật ban đầu).
+  - Tại $t = 1 \implies v(1) = 0$ (chậm dần về 0 trước khi dừng, không bị nảy va đập).
+- **Lực quán tính $F = m \cdot a(t)$** biến thiên mượt mà giúp 6 chai đứng vững $100\%$ không bị ngã đổ.
+- Sau khi đẩy xong, xi-lanh lùi về vị trí ban đầu và mở cửa chặn `PackStopGate` cho lô chai tiếp theo.
+
+
 
 ---
 
